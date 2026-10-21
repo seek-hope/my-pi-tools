@@ -16,7 +16,7 @@ import {
   verificationKey,
   verificationSummary,
 } from '../src/checks.ts';
-import { sandboxAvailable } from './sandbox-capability.mjs';
+import { overlayAvailable } from './sandbox-capability.mjs';
 
 test('verification environment normalizes defaults, deduplicates names and rejects invalid values', () => {
   assert.deepEqual(normalizeVerification(undefined), DEFAULT_VERIFICATION);
@@ -152,7 +152,7 @@ test('failure signatures only suggest changes for capabilities the environment w
 });
 test(
   'real sandbox honors the declared environment and never writes the host workspace',
-  { skip: !sandboxAvailable },
+  { skip: !overlayAvailable },
   async (t) => {
     const cwd = mkdtempSync(join(tmpdir(), 'goal-sandbox-env-'));
     const server = createServer((socket) => socket.end());
