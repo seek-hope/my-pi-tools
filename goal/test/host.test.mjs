@@ -14,6 +14,7 @@ import {
 import { GoalRuntime } from '../src/runtime.ts';
 import { activeGoal } from '../src/state.ts';
 import { WORK_RULES } from '../src/prompts.ts';
+import { sandboxAvailable } from './sandbox-capability.mjs';
 
 for (const { queuedInput, commandStart } of [
   { queuedInput: false, commandStart: false },
@@ -22,7 +23,7 @@ for (const { queuedInput, commandStart } of [
 ])
   test(
     `installed Pi host: ${commandStart ? 'command-triggered run' : 'model-created goal'} and verified auto-clear with ${queuedInput ? 'queued' : 'idle'} user input`,
-    { timeout: 15_000 },
+    { timeout: 15_000, skip: !sandboxAvailable },
     async (t) => {
       const cwd = mkdtempSync(join(tmpdir(), 'goal-host-test-'));
       const agentDir = join(cwd, 'agent');

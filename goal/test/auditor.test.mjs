@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runIndependentAudit, safeAuditPath } from '../src/auditor.ts';
 import { runCheck } from '../src/checks.ts';
+import { sandboxAvailable } from './sandbox-capability.mjs';
 import { applySpec, makeGoal, permissionDefaults } from '../src/state.ts';
 import { auditPrompt } from '../src/prompts.ts';
 import { defaults } from '../src/settings.ts';
@@ -411,7 +412,7 @@ test('bounded file reads report continuation and search locates distant evidence
 });
 test(
   'approved command checks stay read-only, ignore legacy timeouts and honor cancellation',
-  { skip: process.platform !== 'linux' },
+  { skip: !sandboxAvailable },
   async (t) => {
     const { cwd } = setup(t);
     const valid = await runCheck(cwd, {
