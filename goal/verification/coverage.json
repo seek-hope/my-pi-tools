@@ -1,0 +1,283 @@
+[
+  {
+    "id": "approval",
+    "behavior": "Initial scope, pending amendments, task refinement and mandatory research obligations",
+    "sources": [
+      "src/state.ts",
+      "src/runtime.ts",
+      "src/prompts.ts"
+    ],
+    "models": [
+      "AuditProtocol",
+      "LifecycleProtocol"
+    ],
+    "contracts": [
+      "completion",
+      "spec-refinement",
+      "transitions"
+    ],
+    "tests": [
+      "test/state-store.test.mjs",
+      "test/legacy-research.test.mjs",
+      "test/host-lifecycle.test.mjs"
+    ],
+    "boundary": "Simple-objective classification and whether user text authorizes a particular action remain semantic heuristics."
+  },
+  {
+    "id": "completion",
+    "behavior": "Mechanical and independent audit gates, failures, budget-error classification and repair threshold",
+    "sources": [
+      "src/runtime.ts",
+      "src/auditor.ts"
+    ],
+    "models": [
+      "AuditProtocol",
+      "InspectionProtocol",
+      "CheckProtocol"
+    ],
+    "contracts": [
+      "findings"
+    ],
+    "tests": [
+      "test/auditor.test.mjs",
+      "test/runtime.test.mjs"
+    ],
+    "boundary": "Correct evidence interpretation is an external model judgment; a structural verdict is not a scientific proof."
+  },
+  {
+    "id": "queue",
+    "behavior": "Single selected goal, FIFO creation, approved advancement and resume ordering",
+    "sources": [
+      "src/runtime.ts",
+      "src/state.ts"
+    ],
+    "models": [
+      "QueueProtocol",
+      "LifecycleProtocol"
+    ],
+    "contracts": [
+      "queue"
+    ],
+    "tests": [
+      "test/runtime.test.mjs"
+    ],
+    "boundary": "Three goals; explicit user selection and arbitrary queue lengths rely on implementation tests."
+  },
+  {
+    "id": "identity",
+    "behavior": "Session binding, clear, panel state, owner lease rotation and stale callbacks; verified goals clear after a real input, with final usage preserved",
+    "sources": [
+      "src/runtime.ts",
+      "src/store.ts"
+    ],
+    "models": [
+      "SessionProtocol",
+      "JournalProtocol",
+      "LifecycleProtocol",
+      "AutoClearProtocol"
+    ],
+    "contracts": [],
+    "tests": [
+      "test/session-store.test.mjs",
+      "test/host-cancellation.test.mjs"
+    ],
+    "boundary": "No proof of host event delivery, SHA collision resistance, PID reuse or cross-host liveness."
+  },
+  {
+    "id": "persistence",
+    "behavior": "Lock/read/validate/append, hash-chain deltas with periodic snapshots, in-memory snapshot reuse, revision parent continuity, partial tails and atomic legacy import",
+    "sources": [
+      "src/store.ts",
+      "src/state.ts"
+    ],
+    "models": [
+      "JournalProtocol",
+      "RecoveryProtocol"
+    ],
+    "contracts": [
+      "storage"
+    ],
+    "tests": [
+      "test/session-store.test.mjs",
+      "test/state-store.test.mjs"
+    ],
+    "boundary": "Filesystem operations, mkdir exclusivity, successful fsync and atomic rename are assumptions; no power-loss proof. Empty crash locks can require operator recovery."
+  },
+  {
+    "id": "permissions",
+    "behavior": "Read-only scope gate, explicit network/install overrides, exact grant cache and stale confirmation fences",
+    "sources": [
+      "src/runtime.ts",
+      "src/permissions.ts",
+      "src/settings.ts"
+    ],
+    "models": [
+      "PermissionProtocol"
+    ],
+    "contracts": [
+      "settings-permissions"
+    ],
+    "tests": [
+      "test/permissions.test.mjs",
+      "test/runtime.test.mjs"
+    ],
+    "boundary": "Command classification is a conservative heuristic, not a shell security boundary. Hash identity, host restrictions and filesystem races are external."
+  },
+  {
+    "id": "accounting",
+    "behavior": "Metered components, final turn accounting, cumulative budget, no-progress count and resume preservation",
+    "sources": [
+      "src/state.ts",
+      "src/runtime.ts",
+      "src/auditor.ts",
+      "src/stagnation.ts"
+    ],
+    "models": [
+      "AccountingProtocol",
+      "AuditProtocol",
+      "LifecycleProtocol"
+    ],
+    "contracts": [
+      "usage",
+      "budget-resume",
+      "progress-clock"
+    ],
+    "tests": [
+      "test/stagnation.test.mjs",
+      "test/host-cancellation.test.mjs",
+      "test/runtime.test.mjs"
+    ],
+    "boundary": "Actual provider usage can arrive late, be unknown or overshoot the budget; no monetary hard cap. Accounting model uses positive known costs; implementation enumeration includes non-finite inputs."
+  },
+  {
+    "id": "continuation",
+    "behavior": "Pending input priority, completed host outcome, required tools, budget/stagnation gates and idle release",
+    "sources": [
+      "src/runtime.ts"
+    ],
+    "models": [
+      "SchedulingProtocol",
+      "QueueProtocol"
+    ],
+    "contracts": [],
+    "tests": [
+      "test/host.test.mjs",
+      "test/host-lifecycle.test.mjs",
+      "test/host-cancellation.test.mjs"
+    ],
+    "boundary": "Host fairness and tool response assumptions; no unconditional termination or long-run stability proof. Prospective next-goal gates are abstract Booleans."
+  },
+  {
+    "id": "context",
+    "behavior": "Regenerate current session/goal snapshots and one eligible policy, preserving conversation and valid queued planning",
+    "sources": [
+      "src/runtime.ts",
+      "src/prompts.ts"
+    ],
+    "models": [
+      "ContextProtocol"
+    ],
+    "contracts": [
+      "context"
+    ],
+    "tests": [
+      "test/runtime.test.mjs",
+      "test/host.test.mjs"
+    ],
+    "boundary": "Checks control-message structure and identity, not whether an LLM obeys the text or correctly interprets a summary."
+  },
+  {
+    "id": "checks",
+    "behavior": "Declared per-goal verification environment (read-only/ephemeral workspace, isolated/host network, named host variables), frozen snapshots, fail-closed sandboxing, cancellation/identity gates and environment-vs-implementation failure classification",
+    "sources": [
+      "src/checks.ts",
+      "src/runtime.ts"
+    ],
+    "models": [
+      "CheckProtocol",
+      "VerificationProtocol"
+    ],
+    "contracts": [
+      "environment"
+    ],
+    "tests": [
+      "test/runtime.test.mjs",
+      "test/host-cancellation.test.mjs",
+      "test/checks-env.test.mjs"
+    ],
+    "boundary": "Linux bubblewrap, overlayfs, namespaces, process-group delivery and kernel enforcement remain integration assumptions. Failure classification is a conservative heuristic that never converts a failed check into a pass; environment advice does not prove the failure was environmental."
+  },
+  {
+    "id": "inspection",
+    "behavior": "Artifact path boundary, successful inspection, later response and complete unique findings",
+    "sources": [
+      "src/auditor.ts"
+    ],
+    "models": [
+      "InspectionProtocol",
+      "AuditProtocol"
+    ],
+    "contracts": [
+      "findings"
+    ],
+    "tests": [
+      "test/auditor.test.mjs"
+    ],
+    "boundary": "Path model abstracts canonicalization; concurrent symlink mutation, filesystem stability and paged content meaning are outside it. audit_record/list alone do not count as inspection."
+  },
+  {
+    "id": "configuration",
+    "behavior": "Current policy precedence, retired limits ignored and exact two-release host support",
+    "sources": [
+      "src/settings.ts",
+      "src/compatibility.ts",
+      "extensions/index.ts"
+    ],
+    "models": [],
+    "contracts": [
+      "settings-permissions",
+      "host-support"
+    ],
+    "tests": [
+      "test/compatibility.test.mjs",
+      "test/permissions.test.mjs"
+    ],
+    "boundary": "Current and immediately preceding release only. Old goal data protection is separate from host-version support."
+  },
+  {
+    "id": "presentation",
+    "behavior": "Status labels, Unicode/control cleanup, width/height bounds and pending proposal display; readable complete approval summaries with bounded scrollable review",
+    "sources": [
+      "src/tui.ts",
+      "src/runtime.ts",
+      "src/approval.ts"
+    ],
+    "models": [
+      "SessionProtocol"
+    ],
+    "contracts": [
+      "layout"
+    ],
+    "tests": [
+      "test/tui.test.mjs",
+      "test/approval.test.mjs"
+    ],
+    "boundary": "Host width utilities and tested terminal semantics assumed; no pixel, color-contrast or full accessibility proof."
+  },
+  {
+    "id": "external",
+    "behavior": "Diagnosis quality, free-text prompts, remote tools and scientific/product correctness",
+    "sources": [
+      "src/stagnation.ts",
+      "src/prompts.ts",
+      "src/permissions.ts"
+    ],
+    "models": [],
+    "contracts": [],
+    "tests": [
+      "test/stagnation.test.mjs"
+    ],
+    "boundary": "Semantic content and external systems lack a closed finite specification; retained as explicit exclusions, not claimed verified.",
+    "exclusion": true
+  }
+]

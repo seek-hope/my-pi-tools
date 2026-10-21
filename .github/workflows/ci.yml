@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ["22.x", "24.x"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: |
+            codegraph/package-lock.json
+            search/package-lock.json
+      - name: Install bubblewrap for goal checks
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bubblewrap
+      - name: Install codegraph dependencies
+        working-directory: codegraph
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Install search dependencies
+        working-directory: search
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Install goal dependencies
+        working-directory: goal
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Typecheck and test
+        run: npm run check && npm test
+
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+          cache-dependency-path: codegraph/package-lock.json
+      - name: Install CodeGraph CLI
+        run: npm install -g @colbymchenry/codegraph@1.6.2
+      - name: Install extension dependencies
+        working-directory: codegraph
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Run real Pi and CodeGraph smoke test
+        working-directory: codegraph
+        run: npm run smoke

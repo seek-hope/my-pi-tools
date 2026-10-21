@@ -1,0 +1,10 @@
+node_modules/
+.codegraph/
+*.tgz
+.DS_Store
+coverage/
+dist/
+*.log
+
+# Local my-pi-goal session state
+**/.pi/my-pi-goal/

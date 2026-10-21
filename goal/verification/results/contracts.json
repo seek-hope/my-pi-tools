@@ -1,0 +1,89 @@
+{
+  "passed": true,
+  "groups": [
+    {
+      "id": "usage",
+      "domain": "All four usage components in {-1,0,1,2,undefined,NaN,Infinity}; totalTokens and reasoning in the same set.",
+      "assertions": 117649,
+      "passed": true
+    },
+    {
+      "id": "transitions",
+      "domain": "Every source/destination status, approval and last-audit-pass combination.",
+      "assertions": 618,
+      "passed": true
+    },
+    {
+      "id": "completion",
+      "domain": "Two criteria with every evidence subset, two tasks with all three statuses, approval/pending Boolean combinations.",
+      "assertions": 145,
+      "passed": true
+    },
+    {
+      "id": "findings",
+      "domain": "Every finding sequence of length 0..3 over IDs C1/C2/X, blank/nonblank evidence and both verdicts.",
+      "assertions": 6175,
+      "passed": true
+    },
+    {
+      "id": "budget-resume",
+      "domain": "All nine statuses, approval/pending booleans, worker/audit usage 0..4 and budgets unlimited/1/3/6.",
+      "assertions": 7579,
+      "passed": true
+    },
+    {
+      "id": "progress-clock",
+      "domain": "No-progress counters 0..6, progress versions 0..2, meaningful progress booleans; clock absent/backward/equal/forward.",
+      "assertions": 134,
+      "passed": true
+    },
+    {
+      "id": "spec-refinement",
+      "domain": "Task sequences over A/B: old length 0..2, new length 0..3, six scope mutations; every research default subset.",
+      "assertions": 934,
+      "passed": true
+    },
+    {
+      "id": "queue",
+      "domain": "All ordered three-goal status/approval combinations.",
+      "assertions": 1728,
+      "passed": true
+    },
+    {
+      "id": "settings-permissions",
+      "domain": "All 27 partial permission policies at each configuration level; eight full policies and classified tool fixtures.",
+      "assertions": 2255,
+      "passed": true
+    },
+    {
+      "id": "context",
+      "domain": "Every session/goal/generation identity over two values, ownership/terminal booleans and present/absent current goal, with all control message kinds.",
+      "assertions": 288,
+      "passed": true
+    },
+    {
+      "id": "layout",
+      "domain": "All nine statuses, widths 0..120, heights 6..20, compact/expanded and plain/ANSI themes; adversarial Unicode/control text.",
+      "assertions": 261360,
+      "passed": true
+    },
+    {
+      "id": "environment",
+      "domain": "Workspace {readonly,ephemeral} x network {isolated,host} x env sets with duplicates; invalid configs; failure signatures.",
+      "assertions": 206,
+      "passed": true
+    },
+    {
+      "id": "storage",
+      "domain": "Nested state mutations, append-only evidence, object/array removal, equal snapshots and invalid patches.",
+      "assertions": 39,
+      "passed": true
+    },
+    {
+      "id": "host-support",
+      "domain": "Declared current/previous versions and known older/future/prerelease versions.",
+      "assertions": 9,
+      "passed": true
+    }
+  ]
+}

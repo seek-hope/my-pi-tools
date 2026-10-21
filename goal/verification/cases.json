@@ -1,0 +1,442 @@
+[
+  {
+    "name": "audit",
+    "module": "AuditProtocol",
+    "expect": "pass"
+  },
+  {
+    "name": "queue",
+    "module": "QueueProtocol",
+    "expect": "pass"
+  },
+  {
+    "name": "journal",
+    "module": "JournalProtocol",
+    "expect": "pass"
+  },
+  {
+    "name": "queue-legacy-add",
+    "module": "QueueProtocol",
+    "expect": "invariant",
+    "property": "AutomaticFIFO"
+  },
+  {
+    "name": "audit-stale",
+    "module": "AuditProtocol",
+    "expect": "invariant",
+    "property": "NoStaleApplication"
+  },
+  {
+    "name": "audit-owner",
+    "module": "AuditProtocol",
+    "expect": "invariant",
+    "property": "NoUnauthorizedWrites"
+  },
+  {
+    "name": "audit-checks",
+    "module": "AuditProtocol",
+    "expect": "invariant",
+    "property": "CompleteCertified"
+  },
+  {
+    "name": "audit-inspection",
+    "module": "AuditProtocol",
+    "expect": "invariant",
+    "property": "CompleteCertified"
+  },
+  {
+    "name": "audit-evidence",
+    "module": "AuditProtocol",
+    "expect": "invariant",
+    "property": "EvidencePreserved"
+  },
+  {
+    "name": "queue-approval",
+    "module": "QueueProtocol",
+    "expect": "invariant",
+    "property": "NoUnapprovedExecution"
+  },
+  {
+    "name": "queue-bypass",
+    "module": "QueueProtocol",
+    "expect": "invariant",
+    "property": "AutomaticFIFO"
+  },
+  {
+    "name": "audit-live",
+    "module": "AuditProtocol",
+    "expect": "pass"
+  },
+  {
+    "name": "audit-unfair",
+    "module": "AuditProtocol",
+    "expect": "temporal",
+    "property": "EventuallyComplete"
+  },
+  {
+    "name": "queue-live",
+    "module": "QueueProtocol",
+    "expect": "pass"
+  },
+  {
+    "name": "queue-no-continuation",
+    "module": "QueueProtocol",
+    "expect": "temporal",
+    "property": "EventuallyDrained"
+  },
+  {
+    "name": "journal-no-lock",
+    "module": "JournalProtocol",
+    "expect": "invariant",
+    "property": "ChainIntegrity"
+  },
+  {
+    "name": "journal-owner",
+    "module": "JournalProtocol",
+    "expect": "invariant",
+    "property": "AuthorizedCommits"
+  },
+  {
+    "name": "session",
+    "module": "SessionProtocol",
+    "expect": "pass"
+  },
+  {
+    "name": "session-directory",
+    "module": "SessionProtocol",
+    "expect": "invariant",
+    "property": "SessionIsolation"
+  },
+  {
+    "name": "session-panel",
+    "module": "SessionProtocol",
+    "expect": "invariant",
+    "property": "PanelBinding"
+  },
+  {
+    "name": "session-clear-all",
+    "module": "SessionProtocol",
+    "expect": "invariant",
+    "property": "SessionIsolation"
+  },
+  {
+    "name": "session-stale",
+    "module": "SessionProtocol",
+    "expect": "invariant",
+    "property": "NoStaleResult"
+  },
+  {
+    "name": "session-lease",
+    "module": "SessionProtocol",
+    "expect": "invariant",
+    "property": "NoStaleResult"
+  },
+  {
+    "name": "lifecycle",
+    "module": "LifecycleProtocol",
+    "expect": "pass"
+  },
+  {
+    "name": "lifecycle-stale",
+    "module": "LifecycleProtocol",
+    "expect": "invariant",
+    "property": "NoStaleCreation"
+  },
+  {
+    "name": "lifecycle-approval",
+    "module": "LifecycleProtocol",
+    "expect": "invariant",
+    "property": "ApprovedExecution"
+  },
+  {
+    "name": "lifecycle-stop",
+    "module": "LifecycleProtocol",
+    "expect": "invariant",
+    "property": "StopBoundary"
+  },
+  {
+    "name": "lifecycle-budget",
+    "module": "LifecycleProtocol",
+    "expect": "invariant",
+    "property": "ResumeBudget"
+  },
+  {
+    "name": "permission",
+    "module": "PermissionProtocol",
+    "expect": "pass"
+  },
+  {
+    "name": "permission-stale",
+    "module": "PermissionProtocol",
+    "expect": "invariant",
+    "property": "AuthorizedOperations"
+  },
+  {
+    "name": "permission-cache",
+    "module": "PermissionProtocol",
+    "expect": "invariant",
+    "property": "AuthorizedOperations"
+  },
+  {
+    "name": "permission-override",
+    "module": "PermissionProtocol",
+    "expect": "invariant",
+    "property": "AuthorizedOperations"
+  },
+  {
+    "name": "permission-scope",
+    "module": "PermissionProtocol",
+    "expect": "invariant",
+    "property": "AuthorizedOperations"
+  },
+  {
+    "name": "accounting",
+    "module": "AccountingProtocol",
+    "expect": "pass"
+  },
+  {
+    "name": "accounting-reset",
+    "module": "AccountingProtocol",
+    "expect": "invariant",
+    "property": "MeteredUsage"
+  },
+  {
+    "name": "accounting-final",
+    "module": "AccountingProtocol",
+    "expect": "invariant",
+    "property": "MeteredUsage"
+  },
+  {
+    "name": "accounting-reasoning",
+    "module": "AccountingProtocol",
+    "expect": "invariant",
+    "property": "MeteredUsage"
+  },
+  {
+    "name": "accounting-repeat",
+    "module": "AccountingProtocol",
+    "expect": "invariant",
+    "property": "ProgressAndBudget"
+  },
+  {
+    "name": "accounting-budget",
+    "module": "AccountingProtocol",
+    "expect": "invariant",
+    "property": "ProgressAndBudget"
+  },
+  {
+    "name": "recovery",
+    "module": "RecoveryProtocol",
+    "expect": "pass"
+  },
+  {
+    "name": "recovery-chain",
+    "module": "RecoveryProtocol",
+    "expect": "invariant",
+    "property": "SafeRecovery"
+  },
+  {
+    "name": "recovery-overwrite",
+    "module": "RecoveryProtocol",
+    "expect": "invariant",
+    "property": "SafeRecovery"
+  },
+  {
+    "name": "recovery-session",
+    "module": "RecoveryProtocol",
+    "expect": "invariant",
+    "property": "SafeRecovery"
+  },
+  {
+    "name": "recovery-tail",
+    "module": "RecoveryProtocol",
+    "expect": "invariant",
+    "property": "SafeRecovery"
+  },
+  {
+    "name": "recovery-history",
+    "module": "RecoveryProtocol",
+    "expect": "invariant",
+    "property": "HistoryPreserved"
+  },
+  {
+    "name": "context",
+    "module": "ContextProtocol",
+    "expect": "pass"
+  },
+  {
+    "name": "context-stale",
+    "module": "ContextProtocol",
+    "expect": "invariant",
+    "property": "OnlyLiveControls"
+  },
+  {
+    "name": "context-empty",
+    "module": "ContextProtocol",
+    "expect": "invariant",
+    "property": "EmptyIsExplicit"
+  },
+  {
+    "name": "context-conversation",
+    "module": "ContextProtocol",
+    "expect": "invariant",
+    "property": "ConversationPreserved"
+  },
+  {
+    "name": "inspection",
+    "module": "InspectionProtocol",
+    "expect": "pass"
+  },
+  {
+    "name": "inspection-batch",
+    "module": "InspectionProtocol",
+    "expect": "invariant",
+    "property": "LaterResponse"
+  },
+  {
+    "name": "inspection-record",
+    "module": "InspectionProtocol",
+    "expect": "invariant",
+    "property": "RealInspection"
+  },
+  {
+    "name": "inspection-coverage",
+    "module": "InspectionProtocol",
+    "expect": "invariant",
+    "property": "CompleteFindings"
+  },
+  {
+    "name": "inspection-path",
+    "module": "InspectionProtocol",
+    "expect": "invariant",
+    "property": "ReadBoundary"
+  },
+  {
+    "name": "check",
+    "module": "CheckProtocol",
+    "expect": "pass"
+  },
+  {
+    "name": "check-sandbox",
+    "module": "CheckProtocol",
+    "expect": "invariant",
+    "property": "CheckBeforeAudit"
+  },
+  {
+    "name": "check-cancel",
+    "module": "CheckProtocol",
+    "expect": "invariant",
+    "property": "CheckBeforeAudit"
+  },
+  {
+    "name": "check-stale",
+    "module": "CheckProtocol",
+    "expect": "invariant",
+    "property": "CheckBeforeAudit"
+  },
+  {
+    "name": "check-failure",
+    "module": "CheckProtocol",
+    "expect": "invariant",
+    "property": "CheckBeforeAudit"
+  },
+  {
+    "name": "verification",
+    "module": "VerificationProtocol",
+    "expect": "pass"
+  },
+  {
+    "name": "verification-snapshot",
+    "module": "VerificationProtocol",
+    "expect": "invariant",
+    "property": "SnapshotUsed"
+  },
+  {
+    "name": "verification-repair",
+    "module": "VerificationProtocol",
+    "expect": "invariant",
+    "property": "EnvironmentIsNotRepair"
+  },
+  {
+    "name": "verification-pause",
+    "module": "VerificationProtocol",
+    "expect": "invariant",
+    "property": "EnvironmentStops"
+  },
+  {
+    "name": "verification-completion",
+    "module": "VerificationProtocol",
+    "expect": "invariant",
+    "property": "NoEnvironmentCompletion"
+  },
+  {
+    "name": "scheduling",
+    "module": "SchedulingProtocol",
+    "expect": "pass"
+  },
+  {
+    "name": "scheduling-input",
+    "module": "SchedulingProtocol",
+    "expect": "invariant",
+    "property": "SafeContinuationAndRelease"
+  },
+  {
+    "name": "scheduling-outcome",
+    "module": "SchedulingProtocol",
+    "expect": "invariant",
+    "property": "SafeContinuationAndRelease"
+  },
+  {
+    "name": "scheduling-gates",
+    "module": "SchedulingProtocol",
+    "expect": "invariant",
+    "property": "SafeContinuationAndRelease"
+  },
+  {
+    "name": "scheduling-release",
+    "module": "SchedulingProtocol",
+    "expect": "invariant",
+    "property": "SafeContinuationAndRelease"
+  },
+  {
+    "name": "auto-clear",
+    "module": "AutoClearProtocol",
+    "expect": "pass"
+  },
+  {
+    "name": "auto-clear-verification",
+    "module": "AutoClearProtocol",
+    "expect": "invariant",
+    "property": "SafeAutomaticClear"
+  },
+  {
+    "name": "auto-clear-input",
+    "module": "AutoClearProtocol",
+    "expect": "invariant",
+    "property": "SafeAutomaticClear"
+  },
+  {
+    "name": "auto-clear-queue",
+    "module": "AutoClearProtocol",
+    "expect": "invariant",
+    "property": "SafeAutomaticClear"
+  },
+  {
+    "name": "auto-clear-charge",
+    "module": "AutoClearProtocol",
+    "expect": "invariant",
+    "property": "SafeAutomaticClear"
+  },
+  {
+    "name": "auto-clear-abort",
+    "module": "AutoClearProtocol",
+    "expect": "invariant",
+    "property": "SafeAutomaticClear"
+  },
+  {
+    "name": "context-policy",
+    "module": "ContextProtocol",
+    "expect": "invariant",
+    "property": "SinglePolicy"
+  }
+]

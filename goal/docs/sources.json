@@ -1,0 +1,179 @@
+{
+  "schemaVersion": 1,
+  "retrievedOn": "2026-10-06",
+  "method": "Static inspection of npm-published README, manifests and selected source files; no third-party extension execution or performance benchmark.",
+  "host": {
+    "pi": "1.0.4",
+    "node": "26.10.0"
+  },
+  "discovery": [
+    "https://registry.npmjs.org/-/v1/search?text=pi-goal&size=20",
+    "https://api.github.com/search/repositories?q=pi-goal&per_page=20"
+  ],
+  "packages": [
+    {
+      "name": "pi-goal",
+      "version": "0.1.7",
+      "published": "2026-06-21T06:29:18.401Z",
+      "registry": "https://registry.npmjs.org/pi-goal/0.1.7",
+      "repository": null,
+      "license": "MIT",
+      "gitHead": "3f100be5434454d3388755a119d01caca9127c16",
+      "tarball": "https://registry.npmjs.org/pi-goal/-/pi-goal-0.1.7.tgz",
+      "integrity": "sha512-gSgt/cdZVYGlR+EXgg33N+up2hlz6mx0xRoEODN6Cnf2Xc0FrR7E5RLZkZModz/iKOXhzp96+s7q8rIdRn/0VA==",
+      "shasum": "7efde241ae70c2ab88d6f1a3d6cdd4a45620a39d",
+      "peerDependencies": {
+        "@mariozechner/pi-coding-agent": "*",
+        "@mariozechner/pi-tui": "*"
+      }
+    },
+    {
+      "name": "pi-goal-x",
+      "version": "0.32.3",
+      "published": "2026-10-02T10:29:46.350Z",
+      "registry": "https://registry.npmjs.org/pi-goal-x/0.32.3",
+      "repository": {
+        "url": "git+https://github.com/tmonk/pi-goal-x.git",
+        "type": "git"
+      },
+      "license": "MIT",
+      "gitHead": null,
+      "tarball": "https://registry.npmjs.org/pi-goal-x/-/pi-goal-x-0.32.3.tgz",
+      "integrity": "sha512-Jip/7p+yuOx/+ckV6IQDr+WhlVvXVw16aR9HMWadc5itciABHdt4HU0Gi3pJU7gJdnB1W3yjdcq6hMwVo/6YIw==",
+      "shasum": "a6092303bfaca5f83676993c51a399a48e769874",
+      "peerDependencies": {
+        "typebox": "^1.3.11",
+        "@earendil-works/pi-ai": ">=0.83.0 <2.0.0",
+        "@earendil-works/pi-tui": ">=0.83.0 <2.0.0",
+        "@earendil-works/pi-coding-agent": ">=0.83.0 <2.0.0"
+      }
+    },
+    {
+      "name": "@recynie/pi-goal",
+      "version": "0.2.1",
+      "published": "2026-08-30T07:46:43.195Z",
+      "registry": "https://registry.npmjs.org/%40recynie%2Fpi-goal/0.2.1",
+      "repository": {
+        "url": "git+https://github.com/recynie/pi-goal.git",
+        "type": "git"
+      },
+      "license": "MIT",
+      "gitHead": "99ffe50d04d79541bb51f66185b7fe339fad1fab",
+      "tarball": "https://registry.npmjs.org/@recynie/pi-goal/-/pi-goal-0.2.1.tgz",
+      "integrity": "sha512-RDzovIm87bS/+eQsgzV+61Bz9xsZGJiZW3LiD0AlKq1jIW7N6TC2OdTiqZ8dSQ5EKQiPTzEJjU+w0HMxVWDjlg==",
+      "shasum": "8dcb08db1f389e53214798a1f014ae16aa43d3a9",
+      "peerDependencies": {
+        "typebox": "*",
+        "@earendil-works/pi-ai": "*",
+        "@earendil-works/pi-tui": "*",
+        "@earendil-works/pi-coding-agent": "*"
+      }
+    },
+    {
+      "name": "pi-goal-pro",
+      "version": "1.3.1",
+      "published": "2026-06-16T00:54:34.290Z",
+      "registry": "https://registry.npmjs.org/pi-goal-pro/1.3.1",
+      "repository": {
+        "type": "git",
+        "url": "git+https://github.com/izzzzzi/pi-goal-pro.git"
+      },
+      "license": "MIT",
+      "gitHead": "aaef6bf47c6f5cc8e9ddb4bafbb1099a7b91f05f",
+      "tarball": "https://registry.npmjs.org/pi-goal-pro/-/pi-goal-pro-1.3.1.tgz",
+      "integrity": "sha512-LAMbc41KxRx5XGKguQyxtIEoWjAQFTt2GuV8ey+P4ogx+zZK92OuZyAE7XNHb3TTWGtToKk+ikdm5puWKXYfDw==",
+      "shasum": "45604d076dc7e2149efd624104a2604ddf41cdfe",
+      "peerDependencies": {
+        "@earendil-works/pi-ai": "*",
+        "@earendil-works/pi-coding-agent": "*",
+        "@earendil-works/pi-tui": "*",
+        "typebox": "*"
+      }
+    },
+    {
+      "name": "pi-goal-list-loop-audit",
+      "version": "0.39.12",
+      "published": "2026-10-06T14:21:25.339Z",
+      "registry": "https://registry.npmjs.org/pi-goal-list-loop-audit/0.39.12",
+      "repository": {
+        "url": "git+https://github.com/DraconDev/pi-goal-list-loop-audit.git",
+        "type": "git"
+      },
+      "license": "AGPL-3.0-only",
+      "gitHead": "0470180dd31ed3cd836e17c68e0f15d6447fb428",
+      "tarball": "https://registry.npmjs.org/pi-goal-list-loop-audit/-/pi-goal-list-loop-audit-0.39.12.tgz",
+      "integrity": "sha512-qKfco3rjlh8MlUo85yqDlacaYNmVhuQM+LeZKGmsWwxU2Ag7injMR7RPMBIhvNcgIrnhYfeEP4Nv24OOfk2M4g==",
+      "shasum": "e0745c579cf2e55b383401765345cb16d84364cb",
+      "peerDependencies": {
+        "typebox": ">=1.3.14 <1.4.0",
+        "@earendil-works/pi-ai": ">=0.84.2 <0.100.0",
+        "@earendil-works/pi-tui": ">=0.84.2 <0.100.0",
+        "@earendil-works/pi-agent-core": ">=0.84.2 <0.100.0",
+        "@earendil-works/pi-coding-agent": ">=0.84.2 <0.100.0"
+      }
+    },
+    {
+      "name": "@signalridge/pi-goal",
+      "version": "1.4.4",
+      "published": "2026-10-04T12:06:29.709Z",
+      "registry": "https://registry.npmjs.org/%40signalridge%2Fpi-goal/1.4.4",
+      "repository": {
+        "url": "git+https://github.com/signalridge/pi-extensions.git",
+        "type": "git",
+        "directory": "packages/pi-goal"
+      },
+      "license": "MIT",
+      "gitHead": null,
+      "tarball": "https://registry.npmjs.org/@signalridge/pi-goal/-/pi-goal-1.4.4.tgz",
+      "integrity": "sha512-Eugjt1rT8LPJ0ftThJyqDpUF5HzJSKXU9aO9PmXMqni3JWYn0CmIF3kzEimWW8+RLDCmdwe9V0EJBdLN4+n35w==",
+      "shasum": "863f8288fcc458e55d2903e4ee0cc3e54db43117",
+      "peerDependencies": {
+        "typebox": "^1.3.11",
+        "@earendil-works/pi-ai": "^0.84.0 || ^0.85.0 || ^0.86.0 || ^0.87.0 || ^0.99.1",
+        "@earendil-works/pi-tui": "^0.84.0 || ^0.85.0 || ^0.86.0 || ^0.87.0 || ^0.99.1",
+        "@earendil-works/pi-coding-agent": "^0.84.0 || ^0.85.0 || ^0.86.0 || ^0.87.0 || ^0.99.1"
+      }
+    },
+    {
+      "name": "@astrosheep/pi-goal-next",
+      "version": "0.1.12",
+      "published": "2026-09-18T01:48:58.577Z",
+      "registry": "https://registry.npmjs.org/%40astrosheep%2Fpi-goal-next/0.1.12",
+      "repository": {
+        "url": "git+https://github.com/astrosheep-zero/pi-goal-next.git",
+        "type": "git"
+      },
+      "license": null,
+      "gitHead": "39d4bdb92a1bc48985051582c499b8e48af35dae",
+      "tarball": "https://registry.npmjs.org/@astrosheep/pi-goal-next/-/pi-goal-next-0.1.12.tgz",
+      "integrity": "sha512-F1IiVMsNH4IKQsHBcJrkQqtmY/Vol7/e+3L8LXLdkcbCt4TnKX73ga9J+hWSZPYbtv3E1DT2viNvaIPDu666Ag==",
+      "shasum": "fa04e86884f21698ccf6daa7b100230463b88c00",
+      "peerDependencies": {
+        "typebox": "*",
+        "@earendil-works/pi-ai": "*",
+        "@earendil-works/pi-tui": "*",
+        "@earendil-works/pi-coding-agent": "*"
+      }
+    },
+    {
+      "name": "pi-supervisor",
+      "version": "0.5.0",
+      "published": "2026-05-31T12:36:50.427Z",
+      "registry": "https://registry.npmjs.org/pi-supervisor/0.5.0",
+      "repository": {
+        "type": "git",
+        "url": "git+https://github.com/tintinweb/pi-supervisor.git"
+      },
+      "license": "MIT",
+      "gitHead": "63dff13346afa39fe4e6f22001d2a5b7ee60ba8a",
+      "tarball": "https://registry.npmjs.org/pi-supervisor/-/pi-supervisor-0.5.0.tgz",
+      "integrity": "sha512-I1GEn34eaRO2vdChdx3px0IyMWlRZqq6b/UtSPNmWPWbQkwp7mJm+PcJ4zSMYZgpdrNOJ3Pww3fpU7yYO2E2LQ==",
+      "shasum": "37ef3a77053422f2a41df71dc613e6afdac75bd8",
+      "peerDependencies": {
+        "@earendil-works/pi-ai": ">=0.74.0",
+        "@earendil-works/pi-coding-agent": ">=0.74.0",
+        "@earendil-works/pi-tui": ">=0.74.0"
+      }
+    }
+  ]
+}

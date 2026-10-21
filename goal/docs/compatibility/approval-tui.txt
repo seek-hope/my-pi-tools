@@ -1,0 +1,354 @@
+regular / dark / 80 columns / first page
+paperzilla, parallel-web, pathml, pathogen-variant-surveillance,
+────────────────────────────────────────────────────────────────────────────────
+  Review goal scope
+  Objective
+    Improve CSV export for Unicode filenames
+
+  Kind
+    Coding
+
+  Acceptance criteria (2)
+    1. Chinese filenames retain their original characters
+    2. All exported rows are preserved
+
+  Tasks (20)
+    1. Task 1: Review export handling and preserve multiline content 中文 👩‍💻
+    2. Task 2: Review export handling and preserve multiline content 中文 👩‍💻
+    3. Task 3: Review export handling and preserve multiline content 中文 👩‍💻
+    4. Task 4: Review export handling and preserve multiline content 中文 👩‍💻
+    5. Task 5: Review export handling and preserve multiline content 中文 👩‍💻
+    6. Task 6: Review export handling and preserve multiline content 中文 👩‍💻
+    7. Task 7: Review export handling and preserve multiline content 中文 👩‍💻
+    8. Task 8: Review export handling and preserve multiline content 中文 👩‍💻
+    9. Task 9: Review export handling and preserve multiline content 中文 👩‍💻
+────────────────────────────────────────────────────────────────────────────────
+  Lines 1–20 / 42 · ↑↓ / PgUp PgDn scroll
+  enter: approve · escape/ctrl+c: cancel
+────────────────────────────────────────────────────────────────────────────────
+0.0%/1.0M (auto)                               (deepseek) deepseek-v4-pro • high
+
+
+Last page
+paperzilla, parallel-web, pathml, pathogen-variant-surveillance,
+────────────────────────────────────────────────────────────────────────────────
+  Review goal scope
+    12. Task 12: Review export handling and preserve multiline content 中文 👩‍💻
+    13. Task 13: Review export handling and preserve multiline content 中文 👩‍💻
+    14. Task 14: Review export handling and preserve multiline content 中文 👩‍💻
+    15. Task 15: Review export handling and preserve multiline content 中文 👩‍💻
+    16. Task 16: Review export handling and preserve multiline content 中文 👩‍💻
+    17. Task 17: Review export handling and preserve multiline content 中文 👩‍💻
+    18. Task 18: Review export handling and preserve multiline content 中文 👩‍💻
+    19. Task 19: Review export handling and preserve multiline content 中文 👩‍💻
+    20. Task 20: Review export handling and preserve multiline content 中文 👩‍💻
+
+  Checks (2)
+    1. npm test
+    2. python - <<'PY'
+       print("multiline check")
+       PY
+
+  Execution permissions
+    Execution policy: autonomous (no per-tool Goal approval); network:
+  allowed; dependency installation: allowed. Work only within the approved
+  scope; Pi and other extensions retain their permission checks.
+────────────────────────────────────────────────────────────────────────────────
+  Lines 23–42 / 42 · ↑↓ / PgUp PgDn scroll
+  enter: approve · escape/ctrl+c: cancel
+────────────────────────────────────────────────────────────────────────────────
+0.0%/1.0M (auto)                               (deepseek) deepseek-v4-pro • high
+
+
+48 columns after resize / first page
+scvelo, scvi-tools, seaborn, shap, simpy,
+────────────────────────────────────────────────
+  Review goal scope
+  Objective
+    Improve CSV export for Unicode filenames
+
+  Kind
+    Coding
+
+  Acceptance criteria (2)
+    1. Chinese filenames retain their original
+  characters
+    2. All exported rows are preserved
+
+  Tasks (20)
+    1. Task 1: Review export handling and
+  preserve multiline content 中文 👩‍💻
+    2. Task 2: Review export handling and
+  preserve multiline content 中文 👩‍💻
+────────────────────────────────────────────────
+  Lines 1–16 / 65 · ↑↓ / PgUp PgDn scroll
+  enter: approve · escape/ctrl+c: cancel
+────────────────────────────────────────────────
+0.0%/1.0M (auto)          deepseek-v4-pro • high
+
+
+regular / light / 80 columns / first page
+paperzilla, parallel-web, pathml, pathogen-variant-surveillance,
+────────────────────────────────────────────────────────────────────────────────
+  Review goal scope
+  Objective
+    Improve CSV export for Unicode filenames
+
+  Kind
+    Coding
+
+  Acceptance criteria (2)
+    1. Chinese filenames retain their original characters
+    2. All exported rows are preserved
+
+  Tasks (20)
+    1. Task 1: Review export handling and preserve multiline content 中文 👩‍💻
+    2. Task 2: Review export handling and preserve multiline content 中文 👩‍💻
+    3. Task 3: Review export handling and preserve multiline content 中文 👩‍💻
+    4. Task 4: Review export handling and preserve multiline content 中文 👩‍💻
+    5. Task 5: Review export handling and preserve multiline content 中文 👩‍💻
+    6. Task 6: Review export handling and preserve multiline content 中文 👩‍💻
+    7. Task 7: Review export handling and preserve multiline content 中文 👩‍💻
+    8. Task 8: Review export handling and preserve multiline content 中文 👩‍💻
+    9. Task 9: Review export handling and preserve multiline content 中文 👩‍💻
+────────────────────────────────────────────────────────────────────────────────
+  Lines 1–20 / 42 · ↑↓ / PgUp PgDn scroll
+  enter: approve · escape/ctrl+c: cancel
+────────────────────────────────────────────────────────────────────────────────
+0.0%/1.0M (auto)                               (deepseek) deepseek-v4-pro • high
+
+
+Last page
+paperzilla, parallel-web, pathml, pathogen-variant-surveillance,
+────────────────────────────────────────────────────────────────────────────────
+  Review goal scope
+    12. Task 12: Review export handling and preserve multiline content 中文 👩‍💻
+    13. Task 13: Review export handling and preserve multiline content 中文 👩‍💻
+    14. Task 14: Review export handling and preserve multiline content 中文 👩‍💻
+    15. Task 15: Review export handling and preserve multiline content 中文 👩‍💻
+    16. Task 16: Review export handling and preserve multiline content 中文 👩‍💻
+    17. Task 17: Review export handling and preserve multiline content 中文 👩‍💻
+    18. Task 18: Review export handling and preserve multiline content 中文 👩‍💻
+    19. Task 19: Review export handling and preserve multiline content 中文 👩‍💻
+    20. Task 20: Review export handling and preserve multiline content 中文 👩‍💻
+
+  Checks (2)
+    1. npm test
+    2. python - <<'PY'
+       print("multiline check")
+       PY
+
+  Execution permissions
+    Execution policy: autonomous (no per-tool Goal approval); network:
+  allowed; dependency installation: allowed. Work only within the approved
+  scope; Pi and other extensions retain their permission checks.
+────────────────────────────────────────────────────────────────────────────────
+  Lines 23–42 / 42 · ↑↓ / PgUp PgDn scroll
+  enter: approve · escape/ctrl+c: cancel
+────────────────────────────────────────────────────────────────────────────────
+0.0%/1.0M (auto)                               (deepseek) deepseek-v4-pro • high
+
+
+48 columns after resize / first page
+scvelo, scvi-tools, seaborn, shap, simpy,
+────────────────────────────────────────────────
+  Review goal scope
+  Objective
+    Improve CSV export for Unicode filenames
+
+  Kind
+    Coding
+
+  Acceptance criteria (2)
+    1. Chinese filenames retain their original
+  characters
+    2. All exported rows are preserved
+
+  Tasks (20)
+    1. Task 1: Review export handling and
+  preserve multiline content 中文 👩‍💻
+    2. Task 2: Review export handling and
+  preserve multiline content 中文 👩‍💻
+────────────────────────────────────────────────
+  Lines 1–16 / 65 · ↑↓ / PgUp PgDn scroll
+  enter: approve · escape/ctrl+c: cancel
+────────────────────────────────────────────────
+0.0%/1.0M (auto)          deepseek-v4-pro • high
+
+
+fullscreen / dark / 80 columns / first page
+paperzilla, parallel-web, pathml, pathogen-variant-surveillance,
+────────────────────────────────────────────────────────────────────────────────
+  Review goal scope
+  Objective
+    Improve CSV export for Unicode filenames
+
+  Kind
+    Coding
+
+  Acceptance criteria (2)
+    1. Chinese filenames retain their original characters
+    2. All exported rows are preserved
+
+  Tasks (20)
+    1. Task 1: Review export handling and preserve multiline content 中文 👩‍💻
+    2. Task 2: Review export handling and preserve multiline content 中文 👩‍💻
+    3. Task 3: Review export handling and preserve multiline content 中文 👩‍💻
+    4. Task 4: Review export handling and preserve multiline content 中文 👩‍💻
+    5. Task 5: Review export handling and preserve multiline content 中文 👩‍💻
+    6. Task 6: Review export handling and preserve multiline content 中文 👩‍💻
+    7. Task 7: Review export handling and preserve multiline content 中文 👩‍💻
+    8. Task 8: Review export handling and preserve multiline content 中文 👩‍💻
+    9. Task 9: Review export handling and preserve multiline content 中文 👩‍💻
+────────────────────────────────────────────────────────────────────────────────
+  Lines 1–20 / 42 · ↑↓ / PgUp PgDn scroll
+  enter: approve · escape/ctrl+c: cancel
+────────────────────────────────────────────────────────────────────────────────
+0.0%/1.0M (auto)                               (deepseek) deepseek-v4-pro • high
+
+
+Last page
+paperzilla, parallel-web, pathml, pathogen-variant-surveillance,
+────────────────────────────────────────────────────────────────────────────────
+  Review goal scope
+    12. Task 12: Review export handling and preserve multiline content 中文 👩‍💻
+    13. Task 13: Review export handling and preserve multiline content 中文 👩‍💻
+    14. Task 14: Review export handling and preserve multiline content 中文 👩‍💻
+    15. Task 15: Review export handling and preserve multiline content 中文 👩‍💻
+    16. Task 16: Review export handling and preserve multiline content 中文 👩‍💻
+    17. Task 17: Review export handling and preserve multiline content 中文 👩‍💻
+    18. Task 18: Review export handling and preserve multiline content 中文 👩‍💻
+    19. Task 19: Review export handling and preserve multiline content 中文 👩‍💻
+    20. Task 20: Review export handling and preserve multiline content 中文 👩‍💻
+
+  Checks (2)
+    1. npm test
+    2. python - <<'PY'
+       print("multiline check")
+       PY
+
+  Execution permissions
+    Execution policy: autonomous (no per-tool Goal approval); network:
+  allowed; dependency installation: allowed. Work only within the approved
+  scope; Pi and other extensions retain their permission checks.
+────────────────────────────────────────────────────────────────────────────────
+  Lines 23–42 / 42 · ↑↓ / PgUp PgDn scroll
+  enter: approve · escape/ctrl+c: cancel
+────────────────────────────────────────────────────────────────────────────────
+0.0%/1.0M (auto)                               (deepseek) deepseek-v4-pro • high
+
+
+48 columns after resize / first page
+scvelo, scvi-tools, seaborn, shap, simpy,
+────────────────────────────────────────────────
+  Review goal scope
+  Objective
+    Improve CSV export for Unicode filenames
+
+  Kind
+    Coding
+
+  Acceptance criteria (2)
+    1. Chinese filenames retain their original
+  characters
+    2. All exported rows are preserved
+
+  Tasks (20)
+    1. Task 1: Review export handling and
+  preserve multiline content 中文 👩‍💻
+    2. Task 2: Review export handling and
+  preserve multiline content 中文 👩‍💻
+────────────────────────────────────────────────
+  Lines 1–16 / 65 · ↑↓ / PgUp PgDn scroll
+  enter: approve · escape/ctrl+c: cancel
+────────────────────────────────────────────────
+0.0%/1.0M (auto)          deepseek-v4-pro • high
+
+
+fullscreen / light / 80 columns / first page
+paperzilla, parallel-web, pathml, pathogen-variant-surveillance,
+────────────────────────────────────────────────────────────────────────────────
+  Review goal scope
+  Objective
+    Improve CSV export for Unicode filenames
+
+  Kind
+    Coding
+
+  Acceptance criteria (2)
+    1. Chinese filenames retain their original characters
+    2. All exported rows are preserved
+
+  Tasks (20)
+    1. Task 1: Review export handling and preserve multiline content 中文 👩‍💻
+    2. Task 2: Review export handling and preserve multiline content 中文 👩‍💻
+    3. Task 3: Review export handling and preserve multiline content 中文 👩‍💻
+    4. Task 4: Review export handling and preserve multiline content 中文 👩‍💻
+    5. Task 5: Review export handling and preserve multiline content 中文 👩‍💻
+    6. Task 6: Review export handling and preserve multiline content 中文 👩‍💻
+    7. Task 7: Review export handling and preserve multiline content 中文 👩‍💻
+    8. Task 8: Review export handling and preserve multiline content 中文 👩‍💻
+    9. Task 9: Review export handling and preserve multiline content 中文 👩‍💻
+────────────────────────────────────────────────────────────────────────────────
+  Lines 1–20 / 42 · ↑↓ / PgUp PgDn scroll
+  enter: approve · escape/ctrl+c: cancel
+────────────────────────────────────────────────────────────────────────────────
+0.0%/1.0M (auto)                               (deepseek) deepseek-v4-pro • high
+
+
+Last page
+paperzilla, parallel-web, pathml, pathogen-variant-surveillance,
+────────────────────────────────────────────────────────────────────────────────
+  Review goal scope
+    12. Task 12: Review export handling and preserve multiline content 中文 👩‍💻
+    13. Task 13: Review export handling and preserve multiline content 中文 👩‍💻
+    14. Task 14: Review export handling and preserve multiline content 中文 👩‍💻
+    15. Task 15: Review export handling and preserve multiline content 中文 👩‍💻
+    16. Task 16: Review export handling and preserve multiline content 中文 👩‍💻
+    17. Task 17: Review export handling and preserve multiline content 中文 👩‍💻
+    18. Task 18: Review export handling and preserve multiline content 中文 👩‍💻
+    19. Task 19: Review export handling and preserve multiline content 中文 👩‍💻
+    20. Task 20: Review export handling and preserve multiline content 中文 👩‍💻
+
+  Checks (2)
+    1. npm test
+    2. python - <<'PY'
+       print("multiline check")
+       PY
+
+  Execution permissions
+    Execution policy: autonomous (no per-tool Goal approval); network:
+  allowed; dependency installation: allowed. Work only within the approved
+  scope; Pi and other extensions retain their permission checks.
+────────────────────────────────────────────────────────────────────────────────
+  Lines 23–42 / 42 · ↑↓ / PgUp PgDn scroll
+  enter: approve · escape/ctrl+c: cancel
+────────────────────────────────────────────────────────────────────────────────
+0.0%/1.0M (auto)                               (deepseek) deepseek-v4-pro • high
+
+
+48 columns after resize / first page
+scvelo, scvi-tools, seaborn, shap, simpy,
+────────────────────────────────────────────────
+  Review goal scope
+  Objective
+    Improve CSV export for Unicode filenames
+
+  Kind
+    Coding
+
+  Acceptance criteria (2)
+    1. Chinese filenames retain their original
+  characters
+    2. All exported rows are preserved
+
+  Tasks (20)
+    1. Task 1: Review export handling and
+  preserve multiline content 中文 👩‍💻
+    2. Task 2: Review export handling and
+  preserve multiline content 中文 👩‍💻
+────────────────────────────────────────────────
+  Lines 1–16 / 65 · ↑↓ / PgUp PgDn scroll
+  enter: approve · escape/ctrl+c: cancel
+────────────────────────────────────────────────
+0.0%/1.0M (auto)          deepseek-v4-pro • high

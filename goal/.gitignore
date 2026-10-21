@@ -1,0 +1,4 @@
+node_modules/
+.pi/my-pi-goal/
+*.tgz
+coverage/
