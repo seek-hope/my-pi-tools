@@ -4,7 +4,7 @@
 
 使用 pi **原生 MCP**：扩展注册 `codegraph serve --mcp`，由 pi 管理连接、工具发现、调用、取消、结果截断和重连。无需 `pi-mcp-adapter`，不复制 CodeGraph 的工具 schema，也不把它作为 npm 运行时依赖打包。
 
-已验证：**pi 1.3.0、CodeGraph 1.6.2、Node.js 22.23.3、Linux**。开发环境要求 Node.js ≥ 22.19；其他平台未进行实机验证。旧版 pi 若没有 `registerMcpServer`，加载时会提示升级。
+已验证：**pi 1.4.0（peer ≥ 1.3.0）、CodeGraph 1.6.2、Node.js 22.23.3、Linux**。开发环境要求 Node.js ≥ 22.19；其他平台未进行实机验证。旧版 pi 若没有 `registerMcpServer`，加载时会提示升级。
 
 ## 快速开始
 

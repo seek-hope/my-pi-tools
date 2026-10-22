@@ -247,7 +247,10 @@ for (const reopen of [false, true])
         assert.equal(workerCalls, callsBeforeOpen, 'reopening must not restart stopped work');
         for (const name of goalTools) assert.ok(session.getActiveToolNames().includes(name), name);
         assert.equal(session.getActiveToolNames().includes('bash'), false);
-        assert.equal(session.getActiveToolNames().includes('grep'), VERSION === '1.3.0');
+        assert.equal(
+          session.getActiveToolNames().includes('grep'),
+          ['1.3.0', '1.4.0'].includes(VERSION),
+        );
       }
       phase = 'resume';
       await run('The fixture is available. Resume the approved goal and finish.');

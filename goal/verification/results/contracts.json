@@ -70,7 +70,7 @@
     {
       "id": "environment",
       "domain": "Workspace {readonly,ephemeral} x network {isolated,host} x env sets with duplicates; invalid configs; failure signatures.",
-      "assertions": 206,
+      "assertions": 222,
       "passed": true
     },
     {

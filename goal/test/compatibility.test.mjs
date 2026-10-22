@@ -19,7 +19,8 @@ test('rolling support window agrees with host peer dependencies and rejects othe
   assert.throws(() => assertSupportedPi('1.0.3'), /supports Pi/);
   assert.throws(() => assertSupportedPi('1.0.4'), /supports Pi/);
   assert.throws(() => assertSupportedPi('1.1.0'), /supports Pi/);
-  assert.throws(() => assertSupportedPi('1.4.0'), /supports Pi/);
+  assert.throws(() => assertSupportedPi('1.2.0'), /supports Pi/);
+  assert.throws(() => assertSupportedPi('1.5.0'), /supports Pi/);
   const lock = JSON.parse(readFileSync(new URL('../package-lock.json', import.meta.url), 'utf8'));
   assert.deepEqual(lock.packages[''].peerDependencies, p.peerDependencies);
   assert.throws(() => assertSupportedPi('1.1.1'), /supports Pi/);

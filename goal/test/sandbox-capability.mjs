@@ -25,5 +25,4 @@ export const sandboxAvailable = probe(DEFAULT_VERIFICATION);
  * (`--overlay-src` / `--tmp-overlay`). Older distro packages lack it.
  */
 export const overlayAvailable =
-  sandboxAvailable &&
-  probe({ workspace: 'ephemeral', network: 'isolated', env: [] });
+  sandboxAvailable && probe({ workspace: 'ephemeral', network: 'isolated', env: [] });

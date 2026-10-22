@@ -41,7 +41,7 @@ Three interview rounds established the original scope; the user twice approved t
 | Research | Markdown report, manifest, input/software/reference provenance, actual commands and reproducible scripts; explain inapplicable requirements |
 | External tools | Reuse authorized installed tools; dedicated SSH/browser/MCP adapters, notifications and parallel orchestration remain future work |
 | Distribution | Private local Pi package registered globally, not an npm release |
-| Compatibility | Public Pi APIs; only current and immediately preceding releases (1.3.0/1.2.0), exact peer ranges, entry guard and isolated dual-version checks |
+| Compatibility | Public Pi APIs; only current and immediately preceding releases (1.4.0/1.3.0), exact peer ranges, entry guard and isolated dual-version checks |
 
 The latest budget decision supersedes the earlier 200-turn/12-hour suggestion. Execution/audit turn and time caps, separate audit tokens, check timeouts, response output caps and diagnosis deadlines are removed, including for old configurations. Native provider/host limits, cancellation, scope approval, fail-closed sandboxing with declared per-goal capabilities, paging and journal resource limits remain. A configured token budget includes repeated input and cache usage and may overshoot; it is not a hard monetary cap.
 

@@ -23,7 +23,7 @@ export function registerCodegraph(
   dependencies: { env?: NodeJS.ProcessEnv; run?: Runner } = {},
 ): void {
   if (typeof pi.registerMcpServer !== "function") {
-    throw new Error("pi-codegraph requires Pi with native registerMcpServer support (tested on 1.3.0).");
+    throw new Error("pi-codegraph requires Pi with native registerMcpServer support (tested on 1.4.0).");
   }
   const config = loadConfig(dependencies.env);
   const run = dependencies.run ?? runCommand;

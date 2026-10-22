@@ -1,45 +1,46 @@
 {
-  "finishedAt": "2026-10-18T02:36:40.502Z",
+  "finishedAt": "2026-10-22T00:14:41.114Z",
   "node": "v22.23.3",
   "platform": "linux",
   "supportedPi": {
-    "current": "1.3.0",
-    "previous": "1.2.0"
+    "current": "1.4.0",
+    "previous": "1.3.0"
   },
   "sourceHashes": {
     "extensions/index.ts": "347e7d4082b589bb333ba34406a205a79ee27ee2212843b02da8c6aeaf882915",
-    "package-lock.json": "678cd680a1b5f1890499c72be43105792a89f5e83a1a55caa4fc323d9e5c2a2b",
-    "package.json": "d46389dbdfd676426a44379dadb00b76bf60d1eaec1cd20d56fcae1302cd76a8",
+    "package-lock.json": "bb746614ff9f0122b6b82224bff760e326553a6d80c07aff75c0da053c979d2b",
+    "package.json": "29e8facca745042357f4a2a6adabe233860cd953bffdc90ba6dff5b2d7f26726",
     "scripts/check-compat.mjs": "092701d8aaa6225d173b75571d6ade57e12ddde21dce365cc1dedb5db362da09",
     "scripts/check-load.mjs": "b554f445daffcfb83e18f9a731264f7657fa54cb5700bb594a456e4af4d2f184",
     "scripts/link-host.mjs": "c01e3db2d0902329c6398669bbfce100e88acc6ece1165820ff11bcee3012c9a",
     "scripts/verification-sources.mjs": "d8ce137ca19f823918b456fca187a22c2dac481e59cb4109dbeb4668d456d6df",
-    "scripts/verify-contracts.mjs": "2165ab441575ba72bfeb825b21c602bb263014cffd13284e7edfce46e6212bd7",
+    "scripts/verify-contracts.mjs": "dbcba6a583a9a30dfbf72290840201881ab655d3c94189bf5ea2763a1f1a85f7",
     "scripts/verify-coverage.mjs": "e6c5216728906e31ad2f1e17339a9c71ecbb3e7971385b7c48029de7805e36ef",
     "scripts/verify-formal.mjs": "110f3431672bf8a0cf55171bb691bc2cbb5c51865edb1fa037ea81bead4d6078",
     "src/approval.ts": "34171f50e164799f0ba09ca51577581a1aaae130cfb9d98db9915c0139590e7a",
     "src/auditor.ts": "2d4e6c88afda1ccbf1b1d5cfd5b12bd9eeb118e93a63247f4864785169e48a30",
-    "src/checks.ts": "e8aec442762f9d03396316b5c6917e931d72931e07411f9da7617e2c5d151275",
+    "src/checks.ts": "5cc3b5a3e20ec43fc72f05f64e6db41845d3f47d3df90628d16735f2e66fadc7",
     "src/compatibility.ts": "5876df63abb088b735314850475bd1cbcef0d5b9f83582c1f5d6bce18291fc05",
     "src/permissions.ts": "09cdaddc47c95b5cbdcf50670d019079b7004ac6709d4031cafd8c93a66a6d0d",
     "src/prompts.ts": "58a7802e52d08090b1ab5b7b31d0275e61991b64c5c5ec04b18a54c0fa20631d",
-    "src/runtime.ts": "98360608d033ed51fd12bf88b8b986d50cbf29bdade462d68c8fd591c8f14958",
+    "src/runtime.ts": "a43d4141b0ae028c1aeccd6cc543beca1b7c7078805696122de15470fc6001ee",
     "src/settings.ts": "a1300abf0a24b1a5505ca8908a62f3e74cce8d52b87c15560b438ca45696311c",
     "src/stagnation.ts": "80bde0219474537397985ca52b7770e58d1a00f9cb7abed8c212de4ca6d65d55",
     "src/state.ts": "d687256458f139d0cae7cf69a5bca231700c846ccdcc8dd601e1f363443a69b0",
     "src/store.ts": "54615fb5821c9c501b1a4647c24d6c52673f56e81ced66b542b00be115a02406",
     "src/tui.ts": "4bacfd98bad47c07e626aad000509f6da04c924ce9a4b9c3ec5d3b1ce5e2c44e",
     "test/approval.test.mjs": "75b8962da4497ac58c11215b2cde16340afb42035658ded71b5a4f4d7f3b57c3",
-    "test/auditor.test.mjs": "b32a41f808455d06f0d90a6e60bc57074dea5bfb36df7a340aaae9087c55d0cc",
-    "test/checks-env.test.mjs": "90c086015aa07a0825e58b0ae3fa8fe1880a7dcb7339536195533c0ad1c7f2a4",
-    "test/compatibility.test.mjs": "104608a77303aa896004233839b24eee2bfcb77d405a3e0cb53bedf87feba153",
+    "test/auditor.test.mjs": "cd1f8c93c55e4856fa707879332c69997358b479e40fdea763e72e1010897b65",
+    "test/checks-env.test.mjs": "ab3c3adce0e247c11b725643db088cf886a3ed054070fc869e63359e4025397e",
+    "test/compatibility.test.mjs": "7cdbdff4eef6eb7219f64ec8f564b855cf68101d83db7ed7e399271fe5a337c8",
     "test/formal-runner.test.mjs": "b9f3e2f4f6c78dc1d9fb8611731b58e6afe7b080bcc20c75601c2ded0ca8532c",
     "test/host-cancellation.test.mjs": "78d93bb4ea3d7399beba958957e79ff5329c8c7e5150a09abbbe22ebaa388c4e",
-    "test/host-lifecycle.test.mjs": "0797249ee629289acf88c01b4113f916b15769e607c67b4370ae1d5ec3a0ccde",
-    "test/host.test.mjs": "fe13b649552caba637b69d1265f9efdd981131eee10fb80946d058383b4435d0",
+    "test/host-lifecycle.test.mjs": "025c42413e2dfe3e93136f0e254fb3f7f4b796897ecb8a3d219ce1497874cd99",
+    "test/host.test.mjs": "877c9486dde57212ca0fe25b8c2a0eb2c02e997b45a46fa9fa3ac6ad0dc6bbdb",
     "test/legacy-research.test.mjs": "dcbdb418f99c79021ba9ffec909b558080bb3faaad1ade83760889f67e8b49ed",
     "test/permissions.test.mjs": "4b6a574f5590baa7965c00c3954eae9b1a149632073813abb51feb8535401dd8",
-    "test/runtime.test.mjs": "d085af01c068354dc436b63bb114d85b583f438ab4f73104d3ec3a7571281748",
+    "test/runtime.test.mjs": "d8213951dd24f46c74f98ea728378ac7e3aa59bb76a8f5c0dafb82458e1f8f04",
+    "test/sandbox-capability.mjs": "c1bb337888851a2a8f54b5744a89f80fe0c09cdb0b115105e334c1679d7db7f5",
     "test/session-store.test.mjs": "3c208ad6d3c7dbf206a2aeff246571dee18debd47c1c733e4ad8c73471f966ba",
     "test/stagnation.test.mjs": "555f32d91f9a6634ff62d3f83dc0cb4bc1b30b3425c4e4402d108b57385eac46",
     "test/state-store.test.mjs": "38c87e41dae1466083c19fbb95dc2461f5f3bfed0e37db1a36b8d02135d7500e",
@@ -55,7 +56,7 @@
     "verification/LifecycleProtocol.tla": "a888b115629e1c8d12627da887dcbb381515da904c78cefe3138392ae4f127ec",
     "verification/PermissionProtocol.tla": "e5848b2199e2c335d2fedb7eb9f86483ec24fa70c0aad770e39587a715c6432d",
     "verification/QueueProtocol.tla": "b0be79d505dcdb62654f7a5102dd51de55292453ea12becb92bd46742fc6eb5b",
-    "verification/README.md": "065852c4e00e23c6608508cad04d0667fe538a1309811bb799179c902ced504b",
+    "verification/README.md": "1b66e2fe000a86d2e127d292e12f1e086eacc8a27098c3772363c08dcf5a21bb",
     "verification/RecoveryProtocol.tla": "f9c6ff962df24b17dea42e8508eaafac4a26330830926508fec94f4a7eab2306",
     "verification/SchedulingProtocol.tla": "c68a682265fc1366dfda97c98dc38e45a9a0a31ae791e1611e8685a18c97eaf0",
     "verification/SessionProtocol.tla": "badf91c88ba9c25a835e73de35d7155c0505b0756c4bb39e7f68ce69c5277d7a",
@@ -142,16 +143,16 @@
   "passed": true,
   "results": [
     {
-      "version": "1.2.0",
-      "ok": true,
-      "log": "compat-1.2.0.log",
-      "logSha256": "63bc76f41c60707007052f668b59d522dd5181acf1f244ce8e8e24079c9857ab"
-    },
-    {
       "version": "1.3.0",
       "ok": true,
       "log": "compat-1.3.0.log",
-      "logSha256": "ee2b85440d86792c1ba29012705fe7708c4b2c444a2fe37aaddf069f1ace2dc2"
+      "logSha256": "00f745ec71581074f69fcef657dbd27832d527df318fc394c04ebf45e9cde5a3"
+    },
+    {
+      "version": "1.4.0",
+      "ok": true,
+      "log": "compat-1.4.0.log",
+      "logSha256": "d5dbb24aba17b8b72f08a9b5f09fea6ad922ee18bd05798391e867d4aff265a6"
     }
   ]
 }
