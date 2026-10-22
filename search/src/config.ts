@@ -16,6 +16,10 @@ export interface WebToolsConfig {
 	baseUrl: string;
 	/** Resolved lazily: the key is only required when a tool actually runs. */
 	apiKey: string | undefined;
+	/** Exa REST API base URL. Its key is resolved lazily from EXA_API_KEY. */
+	exaBaseUrl: string;
+	exaSearchType: string;
+	exaAllowInsecureBaseUrl: boolean;
 	timeoutMs: number;
 	maxRetries: number;
 	retryBaseDelayMs: number;
@@ -43,6 +47,8 @@ export type Env = Readonly<Record<string, string | undefined>>;
 
 export const DEFAULTS = {
 	baseUrl: "https://api.deepseek.com",
+	exaBaseUrl: "https://api.exa.ai",
+	exaSearchType: "auto",
 	timeoutMs: 20_000,
 	maxRetries: 2,
 	retryBaseDelayMs: 350,
@@ -87,20 +93,20 @@ function isLoopbackHostname(hostname: string): boolean {
 	return host === "localhost" || host === "127.0.0.1" || host === "::1";
 }
 
-function normalizeBaseUrl(raw: string, allowInsecure: boolean): string {
+function normalizeBaseUrl(raw: string, allowInsecure: boolean, fallback: string): string {
 	const trimmed = raw.trim().replace(/\/+$/, "");
 	try {
 		const url = new URL(trimmed);
-		if (url.protocol !== "https:" && url.protocol !== "http:") return DEFAULTS.baseUrl;
-		if (url.username || url.password) return DEFAULTS.baseUrl;
-		// The API key is sent as a bearer token. Never send it over cleartext
-		// to a remote host; loopback is allowed for local development.
+		if (url.protocol !== "https:" && url.protocol !== "http:") return fallback;
+		if (url.username || url.password) return fallback;
+		// API keys are sent as headers. Never send one over cleartext to a
+		// remote host; loopback is allowed for local development.
 		if (url.protocol === "http:" && !allowInsecure && !isLoopbackHostname(url.hostname)) {
-			return DEFAULTS.baseUrl;
+			return fallback;
 		}
 		return trimmed;
 	} catch {
-		return DEFAULTS.baseUrl;
+		return fallback;
 	}
 }
 
@@ -115,8 +121,16 @@ export function loadConfig(env: Env = process.env): WebToolsConfig {
 		baseUrl: normalizeBaseUrl(
 			firstSet(env, ["DEEPSEEK_SEARCH_BASE_URL", "DEEPSEEK_BASE_URL"]) ?? DEFAULTS.baseUrl,
 			allowInsecureBaseUrl,
+			DEFAULTS.baseUrl,
 		),
 		apiKey: firstSet(env, ["DEEPSEEK_API_KEY"]),
+		exaBaseUrl: normalizeBaseUrl(
+			firstSet(env, ["EXA_BASE_URL"]) ?? DEFAULTS.exaBaseUrl,
+			readBool(env, ["EXA_WEB_ALLOW_INSECURE_BASE_URL"], false),
+			DEFAULTS.exaBaseUrl,
+		),
+		exaSearchType: firstSet(env, ["EXA_SEARCH_TYPE"]) ?? DEFAULTS.exaSearchType,
+		exaAllowInsecureBaseUrl: readBool(env, ["EXA_WEB_ALLOW_INSECURE_BASE_URL"], false),
 		timeoutMs: readInt(env, ["DEEPSEEK_SEARCH_TIMEOUT_MS"], DEFAULTS.timeoutMs, 1_000, 300_000),
 		maxRetries: readInt(env, ["DEEPSEEK_SEARCH_MAX_RETRIES"], DEFAULTS.maxRetries, 0, 5),
 		retryBaseDelayMs: readInt(env, ["DEEPSEEK_SEARCH_RETRY_BASE_MS"], DEFAULTS.retryBaseDelayMs, 50, 10_000),
@@ -193,6 +207,25 @@ export function resolveApiKey(env: Env = process.env, authPath?: string): string
 	} catch {
 		// Missing or unreadable auth.json is not an error here; the caller
 		// reports the missing key with instructions.
+	}
+	return undefined;
+}
+
+/** Resolve the optional Exa key from the environment, then Pi's auth.json. */
+export function resolveExaApiKey(env: Env = process.env, authPath?: string): string | undefined {
+	const fromEnv = env.EXA_API_KEY?.trim();
+	if (fromEnv) return fromEnv;
+
+	const path = authPath ?? join(agentDir(env), "auth.json");
+	try {
+		const data = JSON.parse(readFileSync(path, "utf8")) as Record<string, StoredCredential | undefined>;
+		const credential = data.exa;
+		if (credential?.type === "api_key" && typeof credential.key === "string") {
+			const key = credential.key.trim();
+			if (key && !key.startsWith("!")) return key;
+		}
+	} catch {
+		// Missing or unreadable auth.json is not an error here.
 	}
 	return undefined;
 }

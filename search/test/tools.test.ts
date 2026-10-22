@@ -6,6 +6,7 @@ import type { ExtensionAPI, Theme } from "@earendil-works/pi-coding-agent";
 
 import { loadConfig } from "../src/config.ts";
 import type { DeepSeekClient, SearchOutcome } from "../src/deepseek.ts";
+import type { ExaClient } from "../src/exa.ts";
 import { WebToolError } from "../src/errors.ts";
 import { registerWebTools } from "../src/tools.ts";
 
@@ -80,9 +81,50 @@ function fakeClient(overrides: Partial<DeepSeekClient> = {}): DeepSeekClient {
 	};
 }
 
+const EXA_OUTCOME: SearchOutcome = {
+	results: [
+		{
+			title: "Exa result",
+			url: "https://exa.example/",
+			snippet: "exa snippet",
+			summary: "",
+			content: "",
+			site_name: "exa.example",
+			date: null,
+			authority: -1,
+			rerank_score: 0,
+			provider: "exa",
+			providers: ["exa"],
+		},
+	],
+	fromCache: false,
+	source: "network",
+	durationMs: 8,
+	providers: ["exa"],
+};
+
+function fakeExaClient(overrides: Partial<ExaClient> = {}): ExaClient {
+	return {
+		search: async () => EXA_OUTCOME,
+		fetchPage: async (url: string) => ({
+			url,
+			title: "Exa page",
+			content: "Exa body",
+			fromCache: false,
+			source: "network" as const,
+			durationMs: 4,
+			provider: "exa",
+		}),
+		searchCache: {} as never,
+		fetchCache: {} as never,
+		...overrides,
+	};
+}
+
 function captureTools(
 	client: DeepSeekClient,
 	config = loadConfig({ DEEPSEEK_API_KEY: "test-key" }),
+	exa?: ExaClient,
 ): { tools: CapturedTool[]; byName: (name: string) => CapturedTool } {
 	const tools: CapturedTool[] = [];
 	const pi = {
@@ -90,7 +132,10 @@ function captureTools(
 			tools.push(tool as CapturedTool);
 		},
 	} as unknown as ExtensionAPI;
-	registerWebTools(pi, { getClient: async () => client, config });
+	registerWebTools(pi, {
+		getClients: async () => ({ deepseek: client, ...(exa ? { exa } : {}) }),
+		config,
+	});
 	return {
 		tools,
 		byName: (name) => {
@@ -113,9 +158,12 @@ test("registers web_search and web_fetch with the documented schema", () => {
 	assert.ok("count" in searchProps);
 	assert.ok("need_content" in searchProps);
 	assert.ok("ori_question" in searchProps);
+	assert.ok("provider" in searchProps);
 	const fetch = byName("web_fetch");
 	assert.ok("url" in (fetch.parameters.properties ?? {}));
+	assert.ok("provider" in (fetch.parameters.properties ?? {}));
 	assert.match(search.description, /DeepSeek/);
+	assert.match(search.description, /Exa/);
 });
 
 test("web_search executes and returns text plus structured details", async () => {
@@ -252,4 +300,90 @@ test("renderers produce text without touching terminal state", () => {
 		theme,
 	);
 	assert.match((failed?.render(80) ?? []).join("\n"), /timeout/);
+});
+
+test("web_search auto merges both configured providers and deduplicates URLs", async () => {
+	const deepseek = fakeClient();
+	const exa = fakeExaClient({
+		search: async () => ({
+			...EXA_OUTCOME,
+			results: [
+				{ ...SEARCH_OUTCOME.results[0]!, title: "Pi docs from Exa", provider: "exa", providers: ["exa"] },
+				{ ...EXA_OUTCOME.results[0]!, title: "Exa only", url: "https://exa.example/" },
+			],
+		}),
+	});
+	const { byName } = captureTools(
+		deepseek,
+		loadConfig({ DEEPSEEK_API_KEY: "test-key", EXA_API_KEY: "test-exa" }),
+		exa,
+	);
+	const result = await byName("web_search").execute("call", { query: "pi" });
+	assert.equal(result.isError, undefined);
+	const details = result.details as {
+		providers: string[];
+		warnings: string[];
+		resultCount: number;
+		results: Array<{ title: string; providers: string[] }>;
+	};
+	assert.deepEqual(details.providers, ["deepseek", "exa"]);
+	assert.equal(details.resultCount, 2);
+	assert.deepEqual(details.warnings, []);
+	const shared = details.results.find((item) => item.title === "Pi documentation")!;
+	assert.deepEqual(shared.providers, ["deepseek", "exa"]);
+});
+
+test("web_search provider=exa uses only Exa", async () => {
+	const { byName } = captureTools(fakeClient(), loadConfig({ DEEPSEEK_API_KEY: "test-key" }), fakeExaClient());
+	const result = await byName("web_search").execute("call", { query: "pi", provider: "exa" });
+	const details = result.details as { providers: string[]; resultCount: number };
+	assert.deepEqual(details.providers, ["exa"]);
+	assert.equal(details.resultCount, 1);
+});
+
+test("web_search keeps partial results and reports a failed provider", async () => {
+	const exa = fakeExaClient({
+		search: async () => {
+			throw new WebToolError("timeout", "Exa timed out", { retryable: true });
+		},
+	});
+	const { byName } = captureTools(
+		fakeClient(),
+		loadConfig({ DEEPSEEK_API_KEY: "test-key", EXA_API_KEY: "test-exa" }),
+		exa,
+	);
+	const result = await byName("web_search").execute("call", { query: "pi" });
+	assert.equal(result.isError, undefined);
+	const details = result.details as { providers: string[]; warnings: string[] };
+	assert.deepEqual(details.providers, ["deepseek"]);
+	assert.equal(details.warnings.length, 1);
+	assert.match(details.warnings[0]!, /Exa failed/);
+	assert.match(result.content[0]?.text ?? "", /Provider warnings/);
+});
+
+test("web_search provider=both requires both providers", async () => {
+	const { byName } = captureTools(fakeClient());
+	const result = await byName("web_search").execute("call", { query: "pi", provider: "both" });
+	assert.equal(result.isError, true);
+	assert.match(result.content[0]?.text ?? "", /Exa is not configured/);
+});
+
+test("web_fetch auto falls back to Exa and records the warning", async () => {
+	const deepseek = fakeClient({
+		fetchPage: async () => {
+			throw new WebToolError("timeout", "DeepSeek timed out", { retryable: true });
+		},
+	});
+	const { byName } = captureTools(
+		deepseek,
+		loadConfig({ DEEPSEEK_API_KEY: "test-key", EXA_API_KEY: "test-exa" }),
+		fakeExaClient(),
+	);
+	const result = await byName("web_fetch").execute("call", { url: "https://example.com/page" });
+	assert.equal(result.isError, undefined);
+	const details = result.details as { provider: string; warnings: string[] };
+	assert.equal(details.provider, "exa");
+	assert.equal(details.warnings.length, 1);
+	assert.match(details.warnings[0]!, /DeepSeek failed/);
+	assert.match(result.content[0]?.text ?? "", /provider warning/);
 });

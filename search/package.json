@@ -3,7 +3,7 @@
 	"version": "0.1.0",
 	"private": true,
 	"type": "module",
-	"description": "Pi extension: web_search and web_fetch tools backed by the DeepSeek Search & Fetch API",
+	"description": "Pi extension: web_search and web_fetch tools backed by DeepSeek and Exa",
 	"engines": {
 		"node": ">=22.19.0"
 	},

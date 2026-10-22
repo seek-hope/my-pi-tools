@@ -5,7 +5,7 @@
 | 目录 | 包 | 作用 |
 | --- | --- | --- |
 | [`codegraph/`](codegraph/README.md) | `pi-codegraph` | 通过 Pi 原生 MCP 接入 CodeGraph，提供 `/codegraph` 管理命令 |
-| [`search/`](search/README.md) | `pi-deepseek-web` | DeepSeek 驱动的 `web_search` / `web_fetch` |
+| [`search/`](search/README.md) | `pi-deepseek-web` | DeepSeek + Exa 驱动的 `web_search` / `web_fetch` |
 | [`goal/`](goal/README.md) | `my-pi-goal` | 持久化目标、证据记录与独立验收 |
 
 ## 本地检查
@@ -22,7 +22,7 @@ npm test        # 三个包的离线测试
 npm run smoke   # 真实 Pi + CodeGraph 集成测试（需要已安装 codegraph CLI）
 ```
 
-`goal` 的检查命令需要 Linux 和 `bubblewrap`；`search` 需要 `DEEPSEEK_API_KEY` 或 Pi 的 DeepSeek 登录；`codegraph` 需要可执行的 `codegraph` CLI。各包的详细安装、配置和安全说明见对应 README。
+`goal` 的检查命令需要 Linux 和 `bubblewrap`；`search` 需要 `DEEPSEEK_API_KEY`、`EXA_API_KEY` 或 Pi 的 DeepSeek 登录；`codegraph` 需要可执行的 `codegraph` CLI。各包的详细安装、配置和安全说明见对应 README。
 
 ## 安全相关变更
 

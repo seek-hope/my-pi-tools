@@ -124,7 +124,11 @@ export function computeRetryDelay(
 	return Math.min(maxDelayMs, exponential + jitter);
 }
 
-async function readLimited(response: Response, maxBytes: number): Promise<string> {
+async function readLimited(
+	response: Response,
+	maxBytes: number,
+	providerLabel = "DeepSeek",
+): Promise<string> {
 	const body = response.body;
 	if (!body) return "";
 	const reader = body.getReader();
@@ -138,7 +142,10 @@ async function readLimited(response: Response, maxBytes: number): Promise<string
 			total += value.byteLength;
 			if (total > maxBytes) {
 				await reader.cancel().catch(() => {});
-				throw new WebToolError("invalid_response", `DeepSeek response exceeded ${maxBytes} bytes`);
+				throw new WebToolError(
+					"invalid_response",
+					`${providerLabel} response exceeded ${maxBytes} bytes`,
+				);
 			}
 			chunks.push(value);
 		}
@@ -185,39 +192,62 @@ export function parseErrorBody(bodyText: string): ParsedErrorBody {
 	return { message: trimmed.slice(0, 300), code: undefined };
 }
 
-export function classifyHttpError(status: number, bodyText: string): WebToolError {
+export function classifyHttpError(
+	status: number,
+	bodyText: string,
+	providerLabel = "DeepSeek",
+): WebToolError {
 	const { message, code } = parseErrorBody(bodyText);
 	const suffix = code ? ` (${code})` : "";
 	if (status === 401 || status === 403) {
-		return new WebToolError("auth", `DeepSeek rejected the credentials${suffix}: ${message}`, {
+		return new WebToolError("auth", `${providerLabel} rejected the credentials${suffix}: ${message}`, {
 			status,
-			hint: "Check DEEPSEEK_API_KEY, or run /login deepseek in Pi and retry.",
+			hint:
+				providerLabel === "DeepSeek"
+					? "Check DEEPSEEK_API_KEY, or run /login deepseek in Pi and retry."
+					: providerLabel === "Exa"
+						? "Check EXA_API_KEY, then retry."
+						: `Check the ${providerLabel} API key and retry.`,
 		});
 	}
+	if (status === 402) {
+		return new WebToolError(
+			"rate_limit",
+			`${providerLabel} credits or spending budget exhausted${suffix}: ${message}`,
+			{
+				status,
+				hint: `Add credits or raise the ${providerLabel} budget, then retry.`,
+			},
+		);
+	}
 	if (status === 429) {
-		return new WebToolError("rate_limit", `DeepSeek rate limit reached${suffix}: ${message}`, {
+		return new WebToolError("rate_limit", `${providerLabel} rate limit reached${suffix}: ${message}`, {
 			status,
 			retryable: true,
 			hint: "Wait a moment, then retry with a narrower query.",
 		});
 	}
 	if (status === 408) {
-		return new WebToolError("timeout", `DeepSeek timed out${suffix}: ${message}`, {
+		return new WebToolError("timeout", `${providerLabel} timed out${suffix}: ${message}`, {
 			status,
 			retryable: true,
 		});
 	}
 	if (status >= 500) {
-		return new WebToolError("http", `DeepSeek server error ${status}${suffix}: ${message}`, {
+		return new WebToolError("http", `${providerLabel} server error ${status}${suffix}: ${message}`, {
 			status,
 			retryable: true,
 			hint: "This is usually transient; retrying once is reasonable.",
 		});
 	}
 	if (status === 400 || status === 404 || status === 413 || status === 422) {
-		return new WebToolError("invalid_input", `DeepSeek rejected the request${suffix}: ${message}`, { status });
+		return new WebToolError("invalid_input", `${providerLabel} rejected the request${suffix}: ${message}`, {
+			status,
+		});
 	}
-	return new WebToolError("http", `DeepSeek returned HTTP ${status}${suffix}: ${message}`, { status });
+	return new WebToolError("http", `${providerLabel} returned HTTP ${status}${suffix}: ${message}`, {
+		status,
+	});
 }
 
 function debugLog(
@@ -230,6 +260,12 @@ function debugLog(
 
 export interface PostJsonOptions extends HttpClientOptions {
 	apiKey: string;
+	/** Header used for the API key. Defaults to Authorization. */
+	authHeader?: string;
+	/** Prefix before the key. Defaults to "Bearer "; set to "" for x-api-key. */
+	authPrefix?: string;
+	/** Human-readable provider name used in errors. */
+	providerLabel?: string;
 }
 
 /**
@@ -245,6 +281,13 @@ export async function postJson<T>(
 	const fetchImpl = options.fetchImpl ?? fetch;
 	const sleep = options.sleep ?? defaultSleep;
 	const payload = JSON.stringify(body);
+	const providerLabel = options.providerLabel ?? "DeepSeek";
+	const headers: Record<string, string> = {
+		"content-type": "application/json",
+		accept: "application/json",
+		"user-agent": options.userAgent,
+	};
+	headers[options.authHeader ?? "authorization"] = `${options.authPrefix ?? "Bearer "}${options.apiKey}`;
 	let lastError: WebToolError | undefined;
 
 	for (let attempt = 0; attempt <= options.maxRetries; attempt += 1) {
@@ -259,12 +302,7 @@ export async function postJson<T>(
 		try {
 			const response = await fetchImpl(url, {
 				method: "POST",
-				headers: {
-					"content-type": "application/json",
-					accept: "application/json",
-					authorization: `Bearer ${options.apiKey}`,
-					"user-agent": options.userAgent,
-				},
+				headers,
 				body: payload,
 				signal: linked.signal,
 				// The API never redirects; following one could be used to reach
@@ -285,9 +323,9 @@ export async function postJson<T>(
 				});
 			}
 
-			const raw = await readLimited(response, options.maxResponseBytes);
+			const raw = await readLimited(response, options.maxResponseBytes, providerLabel);
 			if (!response.ok) {
-				const error = classifyHttpError(response.status, raw);
+				const error = classifyHttpError(response.status, raw, providerLabel);
 				const retryAfter = parseRetryAfter(response.headers.get("retry-after"));
 				if (!error.retryable || attempt >= options.maxRetries) throw error;
 				lastError = error;
@@ -306,7 +344,9 @@ export async function postJson<T>(
 			try {
 				return JSON.parse(raw) as T;
 			} catch (error) {
-				throw new WebToolError("invalid_response", "DeepSeek returned malformed JSON", { cause: error });
+				throw new WebToolError("invalid_response", `${providerLabel} returned malformed JSON`, {
+					cause: error,
+				});
 			}
 		} catch (error) {
 			if (signal?.aborted) {
@@ -316,7 +356,7 @@ export async function postJson<T>(
 			if (linked.timedOut()) {
 				const timeoutError = new WebToolError(
 					"timeout",
-					`DeepSeek did not respond within ${options.timeoutMs} ms`,
+					`${providerLabel} did not respond within ${options.timeoutMs} ms`,
 					{ retryable: true, cause: error },
 				);
 				if (attempt >= options.maxRetries) throw timeoutError;
@@ -336,10 +376,14 @@ export async function postJson<T>(
 			}
 
 			const message = error instanceof Error ? error.message : String(error);
-			const networkError = new WebToolError("network", `network error contacting DeepSeek: ${message}`, {
-				retryable: true,
-				cause: error,
-			});
+			const networkError = new WebToolError(
+				"network",
+				`network error contacting ${providerLabel}: ${message}`,
+				{
+					retryable: true,
+					cause: error,
+				},
+			);
 			if (attempt >= options.maxRetries) throw networkError;
 			lastError = networkError;
 			const delay = computeRetryDelay(attempt, null, options.retryBaseDelayMs, options.retryMaxDelayMs);

@@ -4,12 +4,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { agentDir, DEFAULTS, loadConfig, resolveApiKey } from "../src/config.ts";
+import { agentDir, DEFAULTS, loadConfig, resolveApiKey, resolveExaApiKey } from "../src/config.ts";
 
 test("loadConfig provides stable defaults", () => {
 	const config = loadConfig({});
 	assert.equal(config.baseUrl, DEFAULTS.baseUrl);
 	assert.equal(config.apiKey, undefined);
+	assert.equal(config.exaBaseUrl, DEFAULTS.exaBaseUrl);
+	assert.equal(config.exaSearchType, DEFAULTS.exaSearchType);
+	assert.equal(config.exaAllowInsecureBaseUrl, false);
 	assert.equal(config.timeoutMs, DEFAULTS.timeoutMs);
 	assert.equal(config.maxRetries, DEFAULTS.maxRetries);
 	assert.equal(config.searchCacheTtlMs, DEFAULTS.searchCacheTtlMs);
@@ -31,9 +34,15 @@ test("loadConfig applies environment overrides and clamps ranges", () => {
 		DEEPSEEK_WEB_ALLOW_PRIVATE_HOSTS: "yes",
 		DEEPSEEK_WEB_SPILL: "off",
 		DEEPSEEK_WEB_DEBUG: "1",
+		EXA_BASE_URL: "https://exa-proxy.example.com/",
+		EXA_SEARCH_TYPE: "deep",
+		EXA_WEB_ALLOW_INSECURE_BASE_URL: "1",
 	});
 	assert.equal(config.baseUrl, "https://proxy.example.com");
 	assert.equal(config.apiKey, "sk-test");
+	assert.equal(config.exaBaseUrl, "https://exa-proxy.example.com");
+	assert.equal(config.exaSearchType, "deep");
+	assert.equal(config.exaAllowInsecureBaseUrl, true);
 	assert.equal(config.timeoutMs, 1_000);
 	assert.equal(config.maxRetries, 5);
 	assert.equal(config.searchCacheTtlMs, 0);
@@ -81,6 +90,21 @@ test("loadConfig requires HTTPS for a remote API base URL unless explicitly allo
 	);
 });
 
+test("loadConfig applies the same HTTPS guard to Exa", () => {
+	assert.equal(loadConfig({ EXA_BASE_URL: "http://proxy.example.com" }).exaBaseUrl, DEFAULTS.exaBaseUrl);
+	assert.equal(
+		loadConfig({ EXA_BASE_URL: "http://127.0.0.1:1234" }).exaBaseUrl,
+		"http://127.0.0.1:1234",
+	);
+	assert.equal(
+		loadConfig({
+			EXA_BASE_URL: "http://proxy.example.com",
+			EXA_WEB_ALLOW_INSECURE_BASE_URL: "1",
+		}).exaBaseUrl,
+		"http://proxy.example.com",
+	);
+});
+
 test("agentDir honors PI_CODING_AGENT_DIR", () => {
 	assert.equal(agentDir({ PI_CODING_AGENT_DIR: "/custom/agent" }), "/custom/agent");
 	assert.match(agentDir({}), /\.pi[\\/]agent$/);
@@ -112,4 +136,18 @@ test("resolveApiKey reads Pi's agent directory through the environment", async (
 		"utf8",
 	);
 	assert.equal(resolveApiKey({ PI_CODING_AGENT_DIR: dir }), "agent-dir-key");
+});
+
+test("resolveExaApiKey prefers the environment, then auth.json", async () => {
+	assert.equal(resolveExaApiKey({ EXA_API_KEY: "  exa-env  " }), "exa-env");
+
+	const dir = await mkdtemp(join(tmpdir(), "pi-exa-config-"));
+	const authPath = join(dir, "auth.json");
+	await writeFile(authPath, JSON.stringify({ exa: { type: "api_key", key: "  exa-file  " } }), "utf8");
+	assert.equal(resolveExaApiKey({}, authPath), "exa-file");
+	assert.equal(resolveExaApiKey({ EXA_API_KEY: "exa-env" }, authPath), "exa-env");
+
+	await writeFile(authPath, JSON.stringify({ exa: { type: "api_key", key: "!security find-key" } }), "utf8");
+	assert.equal(resolveExaApiKey({}, authPath), undefined);
+	assert.equal(resolveExaApiKey({}, join(dir, "missing.json")), undefined);
 });

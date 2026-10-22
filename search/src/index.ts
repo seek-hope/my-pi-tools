@@ -1,16 +1,17 @@
 /**
  * Pi extension entry point.
  *
- * Registers `web_search` and `web_fetch`, both backed by the DeepSeek
- * Search & Fetch API. The client is created lazily so Pi starts normally when
- * no API key is configured; the first tool call reports the missing key.
+ * Registers provider-neutral `web_search` and `web_fetch` tools. DeepSeek and
+ * Exa clients are created lazily; a missing key only disables that provider,
+ * so a session can use Exa alone, DeepSeek alone, or both.
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
-import { loadConfig, resolveApiKey } from "./config.ts";
+import { loadConfig, resolveApiKey, resolveExaApiKey } from "./config.ts";
 import { createDeepSeekClient, type DeepSeekClient } from "./deepseek.ts";
 import { WebToolError } from "./errors.ts";
+import { createExaClient, type ExaClient } from "./exa.ts";
 import { registerWebTools } from "./tools.ts";
 
 export default function deepseekWebExtension(pi: ExtensionAPI): void {
@@ -22,30 +23,20 @@ export default function deepseekWebExtension(pi: ExtensionAPI): void {
 			}
 		: undefined;
 
-	let clientPromise: Promise<DeepSeekClient> | undefined;
-	let clientKey: string | undefined;
+	let deepseekPromise: Promise<DeepSeekClient> | undefined;
+	let deepseekKey: string | undefined;
+	let exaPromise: Promise<ExaClient> | undefined;
+	let exaKey: string | undefined;
 
-	const getClient = (): Promise<DeepSeekClient> => {
-		const apiKey = resolveApiKey();
-		if (!apiKey) {
-			clientPromise = undefined;
-			clientKey = undefined;
-			return Promise.reject(
-				new WebToolError("config", "No DeepSeek API key found", {
-					hint: "Set DEEPSEEK_API_KEY, or run /login deepseek in Pi, then retry.",
-				}),
-			);
+	const getDeepSeek = (apiKey: string): Promise<DeepSeekClient> => {
+		if (deepseekPromise && deepseekKey !== apiKey) {
+			deepseekPromise = undefined;
+			deepseekKey = undefined;
 		}
-		// Recreate the client when the credential changed, so a retry after
-		// /login or key rotation does not keep sending the old key.
-		if (clientPromise && clientKey !== apiKey) {
-			clientPromise = undefined;
-			clientKey = undefined;
-		}
-		if (!clientPromise) {
-			clientKey = apiKey;
-			clientPromise = (async () => {
-				return createDeepSeekClient({
+		if (!deepseekPromise) {
+			deepseekKey = apiKey;
+			deepseekPromise = Promise.resolve().then(() =>
+				createDeepSeekClient({
 					apiKey,
 					baseUrl: config.baseUrl,
 					timeoutMs: config.timeoutMs,
@@ -60,16 +51,77 @@ export default function deepseekWebExtension(pi: ExtensionAPI): void {
 					allowPrivateHosts: config.allowPrivateHosts,
 					userAgent: config.userAgent,
 					...(debug ? { debug } : {}),
-				});
-			})().catch((error: unknown) => {
-				// Allow a later call to retry after the credential is fixed.
-				clientPromise = undefined;
-				clientKey = undefined;
+				}),
+			).catch((error: unknown) => {
+				deepseekPromise = undefined;
+				deepseekKey = undefined;
 				throw error;
 			});
 		}
-		return clientPromise;
+		return deepseekPromise;
 	};
 
-	registerWebTools(pi, { getClient, config });
+	const getExa = (apiKey: string): Promise<ExaClient> => {
+		if (exaPromise && exaKey !== apiKey) {
+			exaPromise = undefined;
+			exaKey = undefined;
+		}
+		if (!exaPromise) {
+			exaKey = apiKey;
+			exaPromise = Promise.resolve().then(() =>
+				createExaClient({
+					apiKey,
+					baseUrl: config.exaBaseUrl,
+					searchType: config.exaSearchType,
+					maxSnippetChars: config.maxSnippetChars,
+					timeoutMs: config.timeoutMs,
+					maxRetries: config.maxRetries,
+					retryBaseDelayMs: config.retryBaseDelayMs,
+					retryMaxDelayMs: config.retryMaxDelayMs,
+					maxResponseBytes: config.maxResponseBytes,
+					searchCacheTtlMs: config.searchCacheTtlMs,
+					searchCacheMaxEntries: config.searchCacheMaxEntries,
+					fetchCacheTtlMs: config.fetchCacheTtlMs,
+					fetchCacheMaxEntries: config.fetchCacheMaxEntries,
+					allowPrivateHosts: config.allowPrivateHosts,
+					userAgent: config.userAgent,
+					...(debug ? { debug } : {}),
+				}),
+			).catch((error: unknown) => {
+				exaPromise = undefined;
+				exaKey = undefined;
+				throw error;
+			});
+		}
+		return exaPromise;
+	};
+
+	const getClients = async (): Promise<{ deepseek?: DeepSeekClient; exa?: ExaClient }> => {
+		const currentDeepSeekKey = resolveApiKey();
+		const currentExaKey = resolveExaApiKey();
+		if (!currentDeepSeekKey && !currentExaKey) {
+			deepseekPromise = undefined;
+			deepseekKey = undefined;
+			exaPromise = undefined;
+			exaKey = undefined;
+			throw new WebToolError("config", "No web search API key found", {
+				hint: "Set DEEPSEEK_API_KEY and/or EXA_API_KEY, then retry.",
+			});
+		}
+		if (!currentDeepSeekKey) {
+			deepseekPromise = undefined;
+			deepseekKey = undefined;
+		}
+		if (!currentExaKey) {
+			exaPromise = undefined;
+			exaKey = undefined;
+		}
+
+		const clients: { deepseek?: DeepSeekClient; exa?: ExaClient } = {};
+		if (currentDeepSeekKey) clients.deepseek = await getDeepSeek(currentDeepSeekKey);
+		if (currentExaKey) clients.exa = await getExa(currentExaKey);
+		return clients;
+	};
+
+	registerWebTools(pi, { getClients, config });
 }

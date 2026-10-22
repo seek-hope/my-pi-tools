@@ -19,6 +19,8 @@ export const MIN_RESULT_COUNT = 1;
 export const MAX_RESULT_COUNT = 50;
 export const DEFAULT_RESULT_COUNT = 10;
 
+export type SearchProvider = "deepseek" | "exa";
+
 export interface SearchInput {
 	query: string;
 	count?: number | undefined;
@@ -36,6 +38,9 @@ export interface SearchResultItem {
 	date: string | null;
 	authority: number;
 	rerank_score: number;
+	/** Provider that produced this item. */
+	provider?: SearchProvider;
+	providers?: SearchProvider[];
 }
 
 export interface SearchOutcome {
@@ -43,6 +48,8 @@ export interface SearchOutcome {
 	fromCache: boolean;
 	source: CacheSource;
 	durationMs: number;
+	providers?: SearchProvider[];
+	warnings?: string[];
 }
 
 export interface FetchOutcome {
@@ -52,6 +59,8 @@ export interface FetchOutcome {
 	fromCache: boolean;
 	source: CacheSource;
 	durationMs: number;
+	provider?: SearchProvider;
+	warnings?: string[];
 }
 
 export interface DeepSeekClientOptions {
@@ -174,6 +183,8 @@ export function parseSearchResponse(payload: unknown): SearchResultItem[] {
 			date: asNullableString(raw.date),
 			authority: asNumber(raw.authority, -1),
 			rerank_score: asNumber(raw.rerank_score, 0),
+			provider: "deepseek",
+			providers: ["deepseek"],
 		});
 	}
 	return results;
@@ -258,6 +269,7 @@ export function createDeepSeekClient(options: DeepSeekClientOptions): DeepSeekCl
 			fromCache: source === "cache",
 			source,
 			durationMs: now() - startedAt,
+			providers: ["deepseek"],
 		};
 	}
 
@@ -296,6 +308,7 @@ export function createDeepSeekClient(options: DeepSeekClientOptions): DeepSeekCl
 			fromCache: source === "cache",
 			source,
 			durationMs: now() - startedAt,
+			provider: "deepseek",
 		};
 	}
 
