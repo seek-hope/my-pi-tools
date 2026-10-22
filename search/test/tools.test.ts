@@ -328,7 +328,6 @@ test("web_search auto merges both configured providers and deduplicates URLs", a
 	};
 	assert.deepEqual(details.providers, ["deepseek", "exa"]);
 	assert.equal(details.resultCount, 2);
-	assert.deepEqual(details.warnings, []);
 	const shared = details.results.find((item) => item.title === "Pi documentation")!;
 	assert.deepEqual(shared.providers, ["deepseek", "exa"]);
 });
@@ -341,7 +340,7 @@ test("web_search provider=exa uses only Exa", async () => {
 	assert.equal(details.resultCount, 1);
 });
 
-test("web_search keeps partial results and reports a failed provider", async () => {
+test("web_search keeps partial results silently and notifies the user", async () => {
 	const exa = fakeExaClient({
 		search: async () => {
 			throw new WebToolError("timeout", "Exa timed out", { retryable: true });
@@ -352,13 +351,21 @@ test("web_search keeps partial results and reports a failed provider", async () 
 		loadConfig({ DEEPSEEK_API_KEY: "test-key", EXA_API_KEY: "test-exa" }),
 		exa,
 	);
-	const result = await byName("web_search").execute("call", { query: "pi" });
+	const notices: Array<{ message: string; type?: string }> = [];
+	const result = await byName("web_search").execute(
+		"call",
+		{ query: "pi" },
+		undefined,
+		undefined,
+		{ hasUI: true, ui: { notify: (message: string, type?: string) => notices.push({ message, type }) } },
+	);
 	assert.equal(result.isError, undefined);
-	const details = result.details as { providers: string[]; warnings: string[] };
+	const details = result.details as { providers: string[] };
 	assert.deepEqual(details.providers, ["deepseek"]);
-	assert.equal(details.warnings.length, 1);
-	assert.match(details.warnings[0]!, /Exa failed/);
-	assert.match(result.content[0]?.text ?? "", /Provider warnings/);
+	assert.doesNotMatch(result.content[0]?.text ?? "", /warning|failed/i);
+	assert.equal(notices.length, 1);
+	assert.match(notices[0]!.message, /Exa is unavailable/);
+	assert.equal(notices[0]!.type, "warning");
 });
 
 test("web_search provider=both requires both providers", async () => {
@@ -368,7 +375,7 @@ test("web_search provider=both requires both providers", async () => {
 	assert.match(result.content[0]?.text ?? "", /Exa is not configured/);
 });
 
-test("web_fetch auto falls back to Exa and records the warning", async () => {
+test("web_fetch auto falls back to Exa silently", async () => {
 	const deepseek = fakeClient({
 		fetchPage: async () => {
 			throw new WebToolError("timeout", "DeepSeek timed out", { retryable: true });
@@ -381,9 +388,23 @@ test("web_fetch auto falls back to Exa and records the warning", async () => {
 	);
 	const result = await byName("web_fetch").execute("call", { url: "https://example.com/page" });
 	assert.equal(result.isError, undefined);
-	const details = result.details as { provider: string; warnings: string[] };
+	const details = result.details as { provider: string };
 	assert.equal(details.provider, "exa");
-	assert.equal(details.warnings.length, 1);
-	assert.match(details.warnings[0]!, /DeepSeek failed/);
-	assert.match(result.content[0]?.text ?? "", /provider warning/);
+	assert.doesNotMatch(result.content[0]?.text ?? "", /provider warning|failed|falling back/i);
+});
+
+test("web_search auto uses the configured provider and notifies the user when the other is missing", async () => {
+	const { byName } = captureTools(fakeClient());
+	const notices: Array<{ message: string; type?: string }> = [];
+	const result = await byName("web_search").execute(
+		"call",
+		{ query: "pi" },
+		undefined,
+		undefined,
+		{ hasUI: true, ui: { notify: (message: string, type?: string) => notices.push({ message, type }) } },
+	);
+	assert.equal(result.isError, undefined);
+	assert.doesNotMatch(result.content[0]?.text ?? "", /warning|failed/i);
+	assert.equal(notices.length, 1);
+	assert.match(notices[0]!.message, /Exa is unavailable/);
 });

@@ -42,7 +42,6 @@ type SearchDetails = {
 	needContent: boolean;
 	requestedProvider: ProviderSelection;
 	providers: SearchProvider[];
-	warnings: string[];
 	resultCount: number;
 	fromCache: boolean;
 	truncated: boolean;
@@ -63,7 +62,6 @@ type FetchDetails = {
 	url: string;
 	title: string;
 	provider: SearchProvider;
-	warnings: string[];
 	bytes: number;
 	lines: number;
 	truncated: boolean;
@@ -223,13 +221,11 @@ export function formatSearchResults(outcome: SearchOutcome, config: WebToolsConf
 } {
 	const { results } = outcome;
 	const providers = outcome.providers?.length ? outcome.providers : (["deepseek"] as SearchProvider[]);
-	const warnings = outcome.warnings ?? [];
 
 	if (results.length === 0) {
 		const cacheNote = outcome.fromCache ? " (cached)" : "";
-		const warningText = warnings.length ? `\n\nProvider warnings:\n${warnings.map((w) => `- ${w}`).join("\n")}` : "";
 		return {
-			text: `No web results${cacheNote}. Try a broader query or different keywords.${warningText}`,
+			text: `No web results${cacheNote}. Try a broader query or different keywords.`,
 			truncated: false,
 		};
 	}
@@ -246,9 +242,6 @@ export function formatSearchResults(outcome: SearchOutcome, config: WebToolsConf
 	const perResultBudget =
 		results.length > 0 ? Math.max(600, Math.floor((config.maxResultBytes * 0.8) / results.length)) : 0;
 	const blocks: string[] = [header];
-	if (warnings.length) {
-		blocks.push(`Provider warnings:\n${warnings.map((warning) => `- ${warning}`).join("\n")}`);
-	}
 
 	results.forEach((result, index) => {
 		const meta = [
@@ -305,11 +298,7 @@ export async function formatFetchResult(
 	const body = outcome.content.trim()
 		? outcome.content
 		: "(The fetcher returned no readable page content.)";
-	const warnings = outcome.warnings ?? [];
-	const warningBlock = warnings.length
-		? `\n\n[provider warning]\n${warnings.map((warning) => `- ${warning}`).join("\n")}`
-		: "";
-	const document = `# ${outcome.title || outcome.url}\n\n${body}${warningBlock}`;
+	const document = `# ${outcome.title || outcome.url}\n\n${body}`;
 	const truncated = truncateText(document, {
 		maxBytes: config.maxResultBytes,
 		maxLines: config.maxResultLines,
@@ -344,7 +333,6 @@ export async function formatFetchResult(
 			url: outcome.url,
 			title: outcome.title,
 			provider: outcome.provider ?? "deepseek",
-			warnings,
 			bytes: truncated.originalBytes,
 			lines: truncated.originalLines,
 			truncated: truncated.truncated,
@@ -364,13 +352,32 @@ function errorResult(toolName: string, error: unknown) {
 	};
 }
 
+type NotifyContext = {
+	hasUI?: boolean;
+	ui?: { notify?: (message: string, type?: "info" | "warning" | "error") => void };
+};
+
 export function registerWebTools(pi: ExtensionAPI, deps: WebToolDeps): void {
 	const { config } = deps;
+	const notified = new Set<string>();
+	const notifySearchFallback = (
+		ctx: NotifyContext | undefined,
+		unavailable: SearchProvider,
+		used: SearchProvider,
+	): void => {
+		const key = `${unavailable}:${used}`;
+		if (!ctx?.hasUI || !ctx.ui?.notify || notified.has(key)) return;
+		notified.add(key);
+		ctx.ui.notify(
+			`Search provider ${providerName(unavailable)} is unavailable; using ${providerName(used)}. Check the search tool configuration.`,
+			"warning",
+		);
+	};
 
 	pi.registerTool<typeof SEARCH_PARAMS, WebToolDetails>({
 		name: "web_search",
 		label: "Web search",
-		description: `Search the web through DeepSeek and/or Exa and return ranked results (title, URL, summary, site, date, authority). provider="auto" (default) uses every configured provider and merges results; provider="both" requires both; "deepseek"/"exa" restrict to one. Use need_content=false first and call web_fetch for pages that matter. Results are cached for ${Math.round(
+		description: `Search the web through DeepSeek and/or Exa and return ranked results (title, URL, summary, site, date, authority). provider="auto" (default) uses every configured provider and merges results; provider="both" requires both; "deepseek"/"exa" restrict to one. If one configured provider is unavailable or fails, the available provider is used and the user is asked to check the search tool. Use need_content=false first and call web_fetch for pages that matter. Results are cached for ${Math.round(
 			config.searchCacheTtlMs / 1000,
 		)}s.`,
 		promptSnippet: "Search the web via DeepSeek and Exa and get ranked, deduplicated results",
@@ -382,12 +389,18 @@ export function registerWebTools(pi: ExtensionAPI, deps: WebToolDeps): void {
 		parameters: SEARCH_PARAMS,
 		executionMode: "parallel",
 
-		async execute(_toolCallId, params, signal) {
+		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
 			const toolName = "web_search";
 			try {
 				const clients = await deps.getClients();
 				const requested = (params.provider ?? "auto") as ProviderSelection;
+				const available = PROVIDERS.filter((provider) => clients[provider] !== undefined);
 				const providers = selectSearchProviders(requested, clients);
+				if (requested === "auto" && available.length === 1) {
+					const used = available[0]!;
+					const missing = PROVIDERS.find((provider) => provider !== used);
+					if (missing) notifySearchFallback(ctx, missing, used);
+				}
 				const settled = await Promise.allSettled(
 					providers.map(async (provider) => {
 						const client = provider === "deepseek" ? clients.deepseek : clients.exa;
@@ -414,24 +427,22 @@ export function registerWebTools(pi: ExtensionAPI, deps: WebToolDeps): void {
 				});
 				if (signal?.aborted) throw new WebToolError("aborted", "request was cancelled");
 				if (successes.length === 0) throw allProvidersFailed(failures);
+				if (requested === "auto" && successes.length === 1) {
+					for (const { provider } of failures) notifySearchFallback(ctx, provider, successes[0]!.provider);
+				}
 
-				const warnings = failures.map(
-					({ provider, error }) => `${providerName(provider)} failed [${error.kind}]: ${error.message}`,
-				);
 				let outcome: SearchOutcome;
 				if (successes.length === 1) {
 					const only = successes[0]!;
 					outcome = {
 						...only.outcome,
 						providers: [only.provider],
-						warnings: [...(only.outcome.warnings ?? []), ...warnings],
 					};
 				} else {
 					outcome = mergeSearchOutcomes(
 						successes.map((success) => success.outcome),
 						params.count ?? 10,
 					);
-					outcome.warnings = [...(outcome.warnings ?? []), ...warnings];
 				}
 
 				const formatted = formatSearchResults(outcome, config);
@@ -442,7 +453,6 @@ export function registerWebTools(pi: ExtensionAPI, deps: WebToolDeps): void {
 					needContent: params.need_content === true,
 					requestedProvider: requested,
 					providers: outcome.providers ?? providers,
-					warnings: outcome.warnings ?? [],
 					resultCount: outcome.results.length,
 					fromCache: outcome.fromCache,
 					truncated: formatted.truncated,
@@ -488,14 +498,12 @@ export function registerWebTools(pi: ExtensionAPI, deps: WebToolDeps): void {
 				return new Text(theme.fg("muted", "web_search: no details"), 0, 0);
 			}
 			const providers = details.providers ?? [];
-			const warnings = details.warnings ?? [];
 			const bits = [
 				`${details.resultCount} result${details.resultCount === 1 ? "" : "s"}`,
 				providers.join("+"),
 				`${details.durationMs} ms`,
 				details.fromCache ? "cached" : "",
 				details.truncated ? "truncated" : "",
-				warnings.length ? "partial" : "",
 			].filter(Boolean);
 			let line = theme.fg("success", "✓ ") + theme.fg("muted", bits.join(" · "));
 			if (expanded) {
@@ -521,7 +529,7 @@ export function registerWebTools(pi: ExtensionAPI, deps: WebToolDeps): void {
 	pi.registerTool<typeof FETCH_PARAMS, WebToolDetails>({
 		name: "web_fetch",
 		label: "Web fetch",
-		description: `Fetch one http(s) page through DeepSeek or Exa and return its title and Markdown content. provider="auto" (default) prefers DeepSeek and falls back to Exa when the first provider fails; "deepseek"/"exa" restrict to one. Output is truncated to ${formatBytes(
+		description: `Fetch one http(s) page through DeepSeek or Exa and return its title and Markdown content. provider="auto" (default) prefers DeepSeek and silently falls back to Exa when DeepSeek is unavailable or fails; "deepseek"/"exa" restrict to one. Output is truncated to ${formatBytes(
 			config.maxResultBytes,
 		)} / ${config.maxResultLines} lines; the full text is saved to a temp file for follow-up reads. Private and metadata hosts are blocked. Pages are cached for ${Math.round(
 			config.fetchCacheTtlMs / 1000,
@@ -535,7 +543,7 @@ export function registerWebTools(pi: ExtensionAPI, deps: WebToolDeps): void {
 		parameters: FETCH_PARAMS,
 		executionMode: "parallel",
 
-		async execute(_toolCallId, params, signal) {
+		async execute(_toolCallId, params, signal, _onUpdate, _ctx) {
 			try {
 				const clients = await deps.getClients();
 				const requested = (params.provider ?? "auto") as FetchProviderSelection;
@@ -546,7 +554,6 @@ export function registerWebTools(pi: ExtensionAPI, deps: WebToolDeps): void {
 				if (order.length === 0) throw missingProviderError();
 				if (requested !== "auto" && !clients[requested]) throw missingProviderError(requested);
 
-				const warnings: string[] = [];
 				let lastError: WebToolError | undefined;
 				for (let index = 0; index < order.length; index += 1) {
 					const provider = order[index]!;
@@ -554,7 +561,6 @@ export function registerWebTools(pi: ExtensionAPI, deps: WebToolDeps): void {
 					if (!client) continue;
 					try {
 						const outcome = await client.fetchPage(params.url, signal);
-						if (warnings.length) outcome.warnings = [...(outcome.warnings ?? []), ...warnings];
 						const formatted = await formatFetchResult(outcome, config);
 						return {
 							content: [{ type: "text", text: formatted.text }],
@@ -565,9 +571,6 @@ export function registerWebTools(pi: ExtensionAPI, deps: WebToolDeps): void {
 						const canTryNext =
 							requested === "auto" && index < order.length - 1 && canFallback(normalized);
 						if (!canTryNext) throw normalized;
-						warnings.push(
-							`${providerName(provider)} failed [${normalized.kind}]: ${normalized.message}; falling back to ${providerName(order[index + 1]!)}`,
-						);
 						lastError = normalized;
 					}
 				}
@@ -606,7 +609,6 @@ export function registerWebTools(pi: ExtensionAPI, deps: WebToolDeps): void {
 				`${details.lines} lines`,
 				details.fromCache ? "cached" : "",
 				details.truncated ? "truncated" : "",
-				(details.warnings ?? []).length ? "fallback" : "",
 			].filter(Boolean);
 			let line = theme.fg("success", "✓ ") + theme.fg("muted", bits.join(" · "));
 			if (expanded) {

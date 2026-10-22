@@ -5,7 +5,7 @@ Pi 扩展：把 **DeepSeek Search & Fetch API** 与 **Exa Search & Contents API*
 - `web_search` → DeepSeek `/v1/tools/search` 和/或 Exa `/search`：返回排序后的网页结果（标题、URL、摘要、站点、日期）。
   - `provider="auto"`（默认）查询所有已配置 provider；两者都可用时用 reciprocal rank fusion 合并去重。
   - `provider="both"` 要求两个 provider 都可用；`"deepseek"` / `"exa"` 限定单一来源。
-- `web_fetch` → DeepSeek `/v1/tools/fetch` 或 Exa `/contents`：抓取单个页面，返回标题与 Markdown 正文。默认优先 DeepSeek，失败时回退 Exa。
+- `web_fetch` → DeepSeek `/v1/tools/fetch` 或 Exa `/contents`：抓取单个页面，返回标题与 Markdown 正文。默认优先 DeepSeek；DeepSeek 不可用或抓取失败时静默回退 Exa。
 
 至少配置一个 API Key：`DEEPSEEK_API_KEY` 或 `EXA_API_KEY`。与当前选中的模型无关（任何 Pi 模型都能调用这两个工具）。Exa 通过 REST API 接入，不依赖 Exa MCP。
 
@@ -81,8 +81,8 @@ pi -e /absolute/path/to/my-pi-search/src/index.ts
 工具行为要点：
 
 - **provider 选择**：默认 `auto` 会查询所有已配置 provider；两者都可用时合并结果。只想用单一来源时传 `provider="deepseek"` 或 `provider="exa"`；`both` 要求两者都配置。
-- **合并去重**：按规范化 URL 去重，用 reciprocal rank fusion 排序；每条结果标记 `deepseek`、`exa` 或两者。单个 provider 失败时保留另一个的结果，并显示 warning。
-- **抓取回退**：`web_fetch` 的 `auto` 优先 DeepSeek；遇到认证、限流、超时或网络错误时回退 Exa。`blocked_url`、参数错误和调用方取消不会触发回退。
+- **合并去重**：按规范化 URL 去重，用 reciprocal rank fusion 排序；每条结果标记 `deepseek`、`exa` 或两者。单个 provider 不可用或失败时静默使用另一个 provider 的结果；在 TUI/RPC 中会提示用户检查 search 配置，但不会把 warning 写进模型结果。
+- **抓取回退**：`web_fetch` 的 `auto` 优先 DeepSeek；遇到认证、限流、超时或网络错误时静默回退 Exa，不向模型追加 warning。`blocked_url`、参数错误和调用方取消不会触发回退。
 - **先摘要后正文**：`web_search` 默认 `need_content=false`，只返回摘要；需要细节时对具体 URL 调用 `web_fetch`，省 token。
 - **结果截断**：`web_fetch` 超过预算时会截断，并把完整内容写到 `/tmp/pi-deepseek-web/*.md`，模型可用 `read` 按 offset/limit 继续读。
 - **缓存**：相同 query/URL 在 TTL 内直接命中；同一 provider 的并发重复请求会合并为一次上游调用。
