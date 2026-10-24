@@ -2,6 +2,7 @@
 	"name": "pi-deepseek-web",
 	"version": "0.1.0",
 	"private": true,
+	"license": "MIT",
 	"type": "module",
 	"description": "Pi extension: web_search and web_fetch tools backed by DeepSeek and Exa",
 	"engines": {

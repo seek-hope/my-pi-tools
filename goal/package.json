@@ -4,6 +4,7 @@
   "description": "Durable autonomous goals for Pi with explicit evidence and independent verification",
   "type": "module",
   "private": true,
+  "license": "MIT",
   "keywords": [
     "pi-package",
     "pi",
