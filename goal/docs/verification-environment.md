@@ -1,72 +1,49 @@
 # Verification environments
 
-Approved checks and their independent rerun need different capabilities for different tasks. A documentation check only reads files; a build writes artifacts; an integration test starts local services or downloads dependencies. A single fixed "read-only, no network" sandbox makes the last two look like implementation failures. This page describes the per-goal verification environment and its boundaries.
+Docker Sandboxes is the only verification backend. Every approved check and audit rerun receives a fresh microVM and the same frozen source inputs. Configure a trusted profile in personal `my-pi-goal.json`; without one, verification fails closed. See [setup](docker-sandboxes-setup.md).
 
-## What the model can declare
+## Per-goal controls
 
-`goal_environment` updates runtime settings on the current goal:
+`goal_environment` changes runtime capabilities without changing approved criteria or commands:
 
-| Field | Values | Default | Meaning |
-| --- | --- | --- | --- |
-| `workspace` | `readonly` | `readonly` | The project is visible read-only. |
-| | `ephemeral` | | The project is visible through a disposable writable overlay. Writes disappear after the run; the real project is never modified. |
-| `network` | `isolated` | `isolated` | No network namespace sharing; local services and downloads are unreachable. |
-| | `host` | | The sandbox shares the host network, so local services and approved downloads work. |
-| `env` | variable names | `[]` | Host environment variables passed by name (for example `PATH`, `NODE_OPTIONS`, a toolchain or cache variable). Values are read at run time and are never stored in the goal journal. |
-
-Example tool call:
+| Field | Values | Behavior |
+| --- | --- | --- |
+| `workspace` | `readonly` (default), `ephemeral` | Read-only source volume, or a disposable writable copy. Neither writes back to the host. |
+| `network` | `isolated` (default) | Outer deny-all policy and no check-container network interface except loopback. |
+| | `allowlist` | Proxy access only to `allow` destinations, excluding `deny`. |
+| | `open` | Proxy access to public DNS destinations, excluding `deny`. Docker organization rules may restrict further. |
+| `allow` | Up to 64 DNS patterns | Exact names or `*.example.com`, optionally with a port such as `registry.npmjs.org:443`. Required in allowlist mode. |
+| `deny` | Up to 64 DNS patterns | Takes precedence over allowed destinations in either online mode. |
+| `env` | `[]` | Host variable forwarding is currently unavailable. Toolchains belong in the pinned image. |
 
 ```json
 {
   "goal_id": "…",
   "generation": 3,
   "workspace": "ephemeral",
-  "network": "host",
-  "env": ["PATH", "CARGO_HOME"],
-  "reason": "cargo build writes target/ and fetches the approved lockfile dependencies"
+  "network": "allowlist",
+  "allow": ["registry.npmjs.org:443", "github.com:443"],
+  "deny": ["blocked.example.com"],
+  "reason": "Install locked dependencies and build in a disposable workspace"
 }
 ```
 
-The plugin validates the values, runs a sandbox probe, records the change and resets the consecutive environment-failure counter. An identical configuration is a no-op.
+For broader access, use `network: "open"`, retaining any needed `deny` rules. To disable egress again, set `network: "isolated"`. The lists remain stored and can be edited or cleared with `[]`; they have no effect while offline. Domain redirects and artifact CDNs need their own allow entries. Wildcards match subdomains, not the apex name; a name without a port permits any proxy tunnel port.
 
-## What does not change
+Online programs must honor `HTTP_PROXY`/`HTTPS_PROXY` (upper- and lower-case forms are provided). npm and typical HTTP clients support these variables. HTTPS uses the sandbox proxy's CA certificate, exposed through standard Node/npm/Python certificate variables. Programs with their own trust stores may need configuration. Direct external TCP/UDP and DNS are blocked; raw sockets, host loopback services, SSH agents and host Docker sockets are not available. A service started by the same approved compound check can use container loopback. An HTTP CONNECT-capable client can tunnel to an approved destination/port.
 
-- **The approved specification is unchanged.** Objective, criteria, tasks, check commands and existing evidence stay exactly as approved. Environment changes need no `/goal approve` because they do not weaken or expand what "done" means.
-- **The real project is never writable in place.** `ephemeral` uses an overlay or temporary copy; writes are discarded after the run and cannot rewrite evidence.
-- **The audit stays independent.** The auditor still reads real artifacts and can rerun approved checks, but cannot change the environment, criteria or findings thresholds.
-- **Permissions still apply.** Explicit `network: ask` and `install: ask` policies remain effective. Scheduling `network: "host"` under an asking policy shows a confirmation and stores an exact grant for the goal. Rejection leaves the environment unchanged.
-- **Checks are not silently disabled.** A check that cannot run is not a pass.
+## Authorization and freezing
 
-## Environment failures versus implementation failures
+An explicit goal permission policy with `network: ask` requires confirmation before online changes are applied. Grants bind the goal and normalized network mode, allow list and deny list; changing destinations or moving to open mode cannot reuse an unrelated grant. Workspace-only changes reuse the same network grant. Under an authorized autonomous policy, routine network configuration needs no extra confirmation. `/goal approve` remains for specification changes, not environment settings.
 
-`goal_submit` runs approved checks with a snapshot of the declared environment. If a check cannot start, or its output indicates a capability the environment withheld, the result is classified as an environment issue:
+Each submission freezes the network policy, image/profile and source manifest. Initial checks and audit reruns use these same identities, even if the live goal or workspace later changes. Auditors cannot change the environment or rerun unapproved commands. Completion verifies current inputs and ownership, and requires successful resource cleanup.
 
-- read-only workspace while the command tried to write (`Read-only file system`);
-- isolated network while the command needed DNS, a local service or a download;
-- a missing executable or tool variable.
+## Failure and migration behavior
 
-The tool result explains the observed problem, the current environment, and the suggested change. It does **not** increment the implementation repair counter, does not run the independent audit and cannot complete the goal.
+A missing sandbox/profile, denied network access, read-only write, missing executable, resource limit or failed cleanup is never a passing check. Likely environment problems provide guidance without consuming implementation repair attempts. Three consecutive environment failures pause the goal; cleanup failures pause immediately and retain an exact resource lease for recovery.
 
-Three consecutive environment failures with unchanged settings pause the goal instead of repeating the same blocked run. Changing the environment resets the counter. An explicit `/goal resume` after a pause is still required; models cannot self-resume past the stop.
+The output classifier is a heuristic. A matching error phrase does not prove an environmental cause and never bypasses completion gates. Fix the actual capability or toolchain and rerun the approved command.
 
-Classification is a conservative heuristic: it points at a likely environment cause but never converts a failed check into success. A genuine test failure that merely prints a matching phrase can be misclassified; the remedy is to declare the capability (`ephemeral` or `host`) and rerun, not to remove the check. Conversely, a declared environment that is still wrong may require a real dependency installation or a different toolchain.
+Existing `network: host` records normalize to `isolated`. Old host-network grants do not silently authorize open egress: choose a new policy explicitly. Old nonempty `env` lists must be cleared. Historical audit records remain unchanged. Removing the personal sandbox profile disables verification; there is no legacy or unrestricted execution fallback.
 
-## Audit behavior
-
-The independent auditor receives the verification summary in its contract and uses the same frozen environment for `audit_check`. It is told that a check which could not run because of the sandbox is not evidence of success. It still must inspect real artifacts in a later model response before submitting findings.
-
-## Contracts and limits
-
-- Linux and `bubblewrap` are still required; missing isolation fails closed.
-- `ephemeral` relies on bubblewrap overlay support. If the probe fails, the change is rejected with the sandbox error and nothing is applied.
-- Host-readable data is not fully hidden. The sandbox isolates writes and, unless declared, networking; it is not a security boundary against deliberately malicious commands. Only run approved commands from trusted scope.
-- Passing an environment variable exposes its value to the check. List only variables the check actually needs and avoid secrets in approved check commands.
-- GPU devices, writable host caches, Docker/SSH sockets and remote executors are not implicitly available. They would need explicit future capabilities rather than broad host access.
-- No timeout is imposed; cancellation terminates the process group. Environment configuration is per goal and persists in the journal.
-
-## Related
-
-- [Model lifecycle tools](model-goals.md)
-- [Prompts and projections](prompts.md)
-- [Design](design.md)
-- [Formal verification](../verification/COVERAGE.md)
+CPU, memory, process count, output, provision/check/cleanup deadlines and snapshot limits are personal profile settings. These sandbox resource limits are separate from goal/auditor token budgets. See [acceptance status](docker-sandboxes-acceptance.md) for the actual tested scope and outstanding platform checks.

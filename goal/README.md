@@ -13,14 +13,14 @@ The interface, commands, tool messages, examples and supporting documentation us
 For this local installation, run `/reload` in an existing Pi session. To install the private source package globally:
 
 ```sh
-pi install /home/rimuru/Projects/Code/for_fun/my-pi-goal
+pi install /absolute/path/to/my-pi-tools/goal
 ```
 
 Or load it temporarily:
 
 ```sh
 cd /path/to/project
-pi -e /path/to/my-pi-goal
+pi -e /absolute/path/to/my-pi-tools/goal/extensions/index.ts
 ```
 
 The package is private and is not published to npm. Avoid registering it both globally and in project settings.
@@ -84,9 +84,11 @@ The executor cannot set `complete`. The auditor must actually inspect artifacts 
 
 ### Verification environment
 
-Approved checks run in a declared sandbox rather than one fixed posture. The main model can set it with `goal_environment`: `workspace` is `readonly` (default) or `ephemeral` (a disposable writable overlay while the real project stays read-only), `network` is `isolated` (default) or `host` (local services and downloads), and `env` lists host variable names to pass through without recording their values. It applies to the checks rerun at submission and to `audit_check` in the independent audit.
+[Docker Sandboxes](docs/docker-sandboxes-setup.md) is the only verification backend. Each check and audit rerun uses a fresh microVM and frozen source inputs; cleanup is required before completion. Configure a pinned profile in personal settings. Missing configuration blocks verification. Ordinary Pi tools remain on the host.
 
-This is runtime configuration, not a change to the approved specification, so it needs no `/goal approve`; existing network/install policies still apply, and host network can require confirmation when the policy asks. A failure that the environment explains is reported as an environment issue, does not count as an implementation repair, and never completes the goal. After three consecutive environment failures with unchanged settings, work pauses instead of looping. See [verification environments](docs/verification-environment.md).
+Use `goal_environment` to select a `readonly` or disposable `ephemeral` workspace, and `isolated`, `allowlist` or `open` networking with explicit `allow`/`deny` destinations. Online traffic uses a controlled HTTP/HTTPS proxy; direct external networking and host services are unavailable. Host variable forwarding is not supported (`env: []`).
+
+Environment changes need no `/goal approve`; explicit network permission policies still apply. Network grants bind the exact mode and destinations. Environment failures cannot complete a goal or consume implementation repair attempts; three consecutive failures pause work. See [verification environments](docs/verification-environment.md) and [real acceptance results](docs/docker-sandboxes-acceptance.md).
 
 ### Storage and context efficiency
 
@@ -116,7 +118,7 @@ Only repair attempts, no-progress protection and an optional cumulative goal tok
 - After an initial failed audit, allow up to three automatic repairs; pause after the fourth consecutive failure. Cumulative-budget errors do not consume repair attempts. Change the budget and resume without weakening criteria or resetting evidence.
 - After three turns without progress, request a different strategy. After five, save an independent diagnosis and pause. If diagnosis is unavailable, still pause. New evidence, task changes and distinct successful tool results count as progress; repeated identical results do not. This is a heuristic, not a proof of semantic progress.
 - No separate audit turn, token, time or response-output cap; no diagnostic deadline or output cap. Only an explicitly configured cumulative budget constrains these operations. Native host/provider limits still apply.
-- Checks have no plugin timeout and need only a `command`. Pause or host cancellation terminates their process group. A tool or provider that does not return may require cancellation or operator intervention.
+- Approved checks need only a `command`. Sandbox resource limits, including provision/check/cleanup deadlines, are configured in the personal profile; the default check deadline is 120 seconds. Pause or cancellation removes the disposable VM. These limits are separate from the overall goal and auditor budgets.
 - Evidence and long output are retrieved by ID with pagination. Full objectives, criteria, tasks and supplements remain in the audit contract. File, pagination and journal resource boundaries are not execution budgets.
 
 ## Permissions and read-only checks
@@ -139,7 +141,7 @@ Explicit `network: "ask"` and `install: "ask"` settings are respected. The comma
 
 The auditor has only `audit_read`, `audit_search`, `audit_list`, `audit_record`, `audit_check` and `audit_result`. Reading frozen executor records does not count as independent inspection. Real-path validation prevents escaping the project through parent paths or symlinks. `audit_check` reruns an approved check in the same declared verification environment as submission. Text files are limited to 5 MB per file; binary artifacts need reviewable text/statistical exports.
 
-**Command checks require Linux and bubblewrap (`bwrap`).** The host filesystem and project are mounted read-only; an `ephemeral` workspace adds a temporary writable overlay without modifying the real project. Networking is isolated unless `host` was declared, and only declared environment variable names are passed through. Missing isolation fails closed. Common credential-bearing home paths (`.ssh`, `.aws`, `.config`, `.gnupg`, `.kube`, `.docker`, `.npmrc`, `.netrc`, `.pi`) are masked with an empty tmpfs or `/dev/null`; this is best-effort defense in depth, not a complete host view. Commands must come from approved scope.
+**Checks require Docker Sandboxes and pinned template/check images.** Source, home directories and host sockets are never mounted. Checks run as non-root inside a restricted container in a fresh microVM; workspace writes are discarded. A failed start or cleanup never falls back to unrestricted execution. See [setup and boundaries](docs/docker-sandboxes-setup.md).
 
 ## Configuration
 
@@ -159,7 +161,7 @@ Retired `limits.maxTurns/maxSeconds`, `audit.maxTurns/maxTokens/timeoutSeconds` 
 
 ## Persistence and recovery
 
-The authoritative journal is `.pi/my-pi-goal/sessions/<SHA-256(sessionId)>/state.jsonl`. The hash key supports custom SDK session IDs without path traversal. Entries contain state snapshots, session IDs, revisions and a hash chain, flushed on commit. The neighboring `STATUS.md` is a readable derived report. `goal_status` returns the full journal path. Project configuration remains shared at `.pi/my-pi-goal.json`.
+The authoritative journal is `.pi/my-pi-goal/sessions/<SHA-256(sessionId)>/state.jsonl`. The hash key supports custom SDK session IDs without path traversal. Entries contain snapshots or incremental patches, session IDs, revisions and a hash chain, flushed on commit. The neighboring `STATUS.md` is a readable derived report. `goal_status` returns the full journal path. Project configuration remains shared at `.pi/my-pi-goal.json`.
 
 Pi stores revision references and panel preferences in the session. `/tree` pauses execution without rewinding durable goal history or workspace files. Instances of the same session use a single writer, with a new ownership token on each acquisition. Old store, token, goal-ID or generation callbacks cannot apply results. Release waits for final usage accounting and queue advancement. Separate sessions still work on the same project files; journal isolation does not coordinate their code edits.
 

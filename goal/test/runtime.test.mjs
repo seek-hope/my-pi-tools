@@ -6,6 +6,8 @@ import { join } from 'node:path';
 import { GoalRuntime } from '../src/runtime.ts';
 import { activeGoal } from '../src/state.ts';
 import { EnvironmentError } from '../src/checks.ts';
+import { SandboxError } from '../src/verification/contract.ts';
+import { testSandbox, verificationFixture } from './sandbox-fixtures.mjs';
 import { WORK_RULES, goalContext, kickoffPrompt, continuationPrompt } from '../src/prompts.ts';
 
 async function harness(t, deps = {}, cwdOverride, sessionId = 'test-session', savedEntries = []) {
@@ -51,9 +53,15 @@ async function harness(t, deps = {}, cwdOverride, sessionId = 'test-session', sa
     sessionManager: { getSessionId: () => sessionId, getEntries: () => entries },
     ui: { notify() {}, setStatus() {}, setWidget() {}, confirm: async () => true },
   };
-  const rt = new GoalRuntime(pi, { ...deps, agentDir: join(cwd, 'fake-agent') });
+  const { check, ...runtimeDeps } = deps;
+  const rt = new GoalRuntime(pi, {
+    prepareVerification: verificationFixture(check),
+    ...runtimeDeps,
+    agentDir: join(cwd, 'fake-agent'),
+  });
   rt.register();
   await events.get('session_start')({}, ctx);
+  rt.settings.sandbox ??= structuredClone(testSandbox);
   t.after(() => {
     rt.shutdown();
     if (!cwdOverride) rmSync(cwd, { recursive: true, force: true });
@@ -432,6 +440,7 @@ test('formal generation counterexample: late pass cannot complete a new verifyin
     generation: old.generation,
     summary: 'old',
   });
+  await new Promise(setImmediate);
   assert.equal(replies.length, 1);
   await h.cmd('pause');
   await h.cmd('resume');
@@ -441,6 +450,7 @@ test('formal generation counterexample: late pass cannot complete a new verifyin
     generation: current.generation,
     summary: 'new',
   });
+  await new Promise(setImmediate);
   assert.equal(replies.length, 2);
   replies[0](audit());
   const stale = await pendingOld;
@@ -1101,6 +1111,7 @@ test('clear during audit cancels it; a late pass cannot affect a newly started g
     generation: old.generation,
     summary: 'old',
   });
+  await new Promise(setImmediate);
   await h.cmd('clear');
   assert.equal(signal.aborted, true);
   await start(h, 'Replacement');
@@ -1148,6 +1159,7 @@ test('clear during a mechanical check rejects its late result before calling the
     generation: g.generation,
     summary: 'check',
   });
+  await new Promise(setImmediate);
   await h.cmd('clear');
   assert.equal(signal.aborted, true);
   const empty = structuredClone(h.rt.state);
@@ -1177,6 +1189,7 @@ test('a late environment failure from a cleared goal is not applied to its repla
     generation: old.generation,
     summary: 'old',
   });
+  await new Promise(setImmediate);
   await h.cmd('clear');
   await start(h, 'Replacement');
   const before = structuredClone(h.goal());
@@ -1778,16 +1791,16 @@ test('verification environment is runtime configuration and is frozen for each s
     goal_id: g.id,
     generation: g.generation,
     workspace: 'ephemeral',
-    network: 'host',
-    env: ['NODE_OPTIONS'],
+    network: 'open',
+    env: [],
     reason: 'build writes inside the workspace',
   });
   assert.match(result.content[0].text, /Verification environment updated/);
   const updated = h.goal();
   assert.deepEqual(updated.verification, {
     workspace: 'ephemeral',
-    network: 'host',
-    env: ['NODE_OPTIONS'],
+    network: 'open',
+    env: [],
   });
   assert.equal(updated.generation, before.generation, 'environment changes are not scope changes');
   assert.equal(updated.approved, true);
@@ -1795,7 +1808,7 @@ test('verification environment is runtime configuration and is frozen for each s
   assert.deepEqual(updated.checks, before.checks);
   assert.match(updated.notes.at(-1), /build writes inside the workspace/);
   assert.deepEqual(seen[0], {
-    probe: { workspace: 'ephemeral', network: 'host', env: ['NODE_OPTIONS'] },
+    probe: { workspace: 'ephemeral', network: 'open', env: [] },
   });
   const unchanged = await h.tool('goal_environment', {
     goal_id: updated.id,
@@ -1812,12 +1825,12 @@ test('verification environment is runtime configuration and is frozen for each s
   assert.match(submitted.content[0].text, /Audit pass/);
   assert.deepEqual(seen[1], {
     check: 'K1',
-    environment: { workspace: 'ephemeral', network: 'host', env: ['NODE_OPTIONS'] },
+    environment: { workspace: 'ephemeral', network: 'open', env: [] },
   });
   assert.deepEqual(h.goal().verification, {
     workspace: 'ephemeral',
-    network: 'host',
-    env: ['NODE_OPTIONS'],
+    network: 'open',
+    env: [],
   });
 });
 
@@ -1908,19 +1921,19 @@ test('host verification network requires policy approval and probe failures neve
   const denied = await h.tool('goal_environment', {
     goal_id: h.goal().id,
     generation: h.goal().generation,
-    network: 'host',
+    network: 'open',
   });
   assert.match(denied.content[0].text, /not approved/);
   assert.deepEqual(h.goal().verification, before);
   assert.match(asks[0].title, /verification network/i);
-  assert.match(asks[0].message, /host network/);
+  assert.match(asks[0].message, /open via HTTP/);
   h.ctx.ui.confirm = async () => true;
   await h.tool('goal_environment', {
     goal_id: h.goal().id,
     generation: h.goal().generation,
-    network: 'host',
+    network: 'open',
   });
-  assert.equal(h.goal().verification.network, 'host');
+  assert.equal(h.goal().verification.network, 'open');
   assert.equal(h.goal().permissions.length, 1);
   assert.match(h.goal().permissions[0], /^[a-f0-9]{64}$/);
   // A second policy-asked change reuses the recorded grant without another prompt.
@@ -1932,7 +1945,7 @@ test('host verification network requires policy approval and probe failures neve
   });
   assert.equal(asks.length, prompts);
   const failing = await harness(t, {
-    probe: async () => ({ ok: false, hint: 'bubblewrap overlay unavailable' }),
+    probe: async () => ({ ok: false, hint: 'sandbox profile unavailable' }),
     audit: async () => audit(),
   });
   await startWithChecks(failing);
@@ -1941,7 +1954,7 @@ test('host verification network requires policy approval and probe failures neve
     generation: failing.goal().generation,
     workspace: 'ephemeral',
   });
-  assert.match(applied.content[0].text, /not applied: bubblewrap overlay unavailable/);
+  assert.match(applied.content[0].text, /not applied: sandbox profile unavailable/);
   assert.deepEqual(failing.goal().verification, {
     workspace: 'readonly',
     network: 'isolated',
@@ -2012,4 +2025,112 @@ test('goal_evidence pages recorded evidence without claiming ownership or changi
     id: 'C1',
   });
   assert.equal(missing.details.disposition, 'stale_goal');
+});
+
+test('Docker verification finalization gates completion and preserves incurred audit usage', async (t) => {
+  for (const failure of [undefined, 'input_changed', 'cleanup', 'check']) {
+    let finished = false;
+    const identity = {
+      backend: 'docker-sandboxes',
+      attemptId: 'fixture',
+      snapshotDigest: 'frozen',
+      environmentDigest: 'offline',
+      specDigest: 'approved',
+    };
+    const verification = {
+      cwd: '/frozen-inputs',
+      identity,
+      manifest: { entries: [], excluded: [] },
+      check: async () => assert.fail('no checks in this fixture'),
+      finish: async (passing) => {
+        assert.equal(passing, true);
+        finished = true;
+        if (failure) throw new SandboxError(`fixture ${failure}`, failure);
+      },
+    };
+    const h = await harness(t, {
+      prepareVerification: async () => verification,
+      audit: async (_g, _s, _ctx, _settings, _signal, _progress, frozen) => {
+        assert.equal(frozen, verification);
+        assert.equal(finished, false);
+        return audit();
+      },
+    });
+    h.rt.settings.sandbox = { backend: 'docker-sandboxes' };
+    await start(h);
+    await evidence(h);
+    const g = h.goal();
+    await h.tool('goal_submit', { goal_id: g.id, generation: g.generation, summary: 'done' });
+    assert.equal(finished, true);
+    assert.equal(h.goal().usage.auditTokens, 10);
+    assert.equal(
+      h.goal().status,
+      failure === 'cleanup' ? 'paused' : failure ? 'active' : 'complete',
+    );
+    assert.equal(h.goal().consecutiveAuditFailures, failure === 'check' ? 1 : 0);
+    if (!failure) assert.deepEqual(h.goal().audits.at(-1).verification, identity);
+  }
+});
+
+test('missing microVM profile blocks even a submission with no command checks', async (t) => {
+  const h = await harness(t, { audit: async () => assert.fail('audit must not run') });
+  delete h.rt.settings.sandbox;
+  await start(h);
+  await evidence(h);
+  const g = h.goal();
+  const result = await h.tool('goal_submit', {
+    goal_id: g.id,
+    generation: g.generation,
+    summary: 'done',
+  });
+  assert.match(result.content[0].text, /Configure Docker Sandboxes/);
+  assert.notEqual(h.goal().status, 'complete');
+  assert.equal(h.goal().consecutiveEnvironmentFailures, 1);
+});
+
+test('network approval is bound to destinations; an old grant cannot authorize broader egress', async (t) => {
+  const h = await harness(t, { probe: async () => ({ ok: true }) });
+  h.rt.settings.permissions = { mode: 'autonomous', network: 'ask', install: 'allow' };
+  await start(h);
+  h.ctx.hasUI = true;
+  let asks = 0,
+    accept = true;
+  h.ctx.ui.confirm = async () => {
+    asks++;
+    return accept;
+  };
+  const key = { goal_id: h.goal().id, generation: h.goal().generation };
+  await h.tool('goal_environment', { ...key, network: 'allowlist', allow: ['example.com'] });
+  assert.equal(asks, 1);
+  await h.tool('goal_environment', { ...key, workspace: 'ephemeral' });
+  assert.equal(asks, 1, 'workspace-only changes reuse the network grant');
+  accept = false;
+  await h.tool('goal_environment', { ...key, allow: ['example.com', 'example.org'] });
+  assert.equal(asks, 2);
+  assert.deepEqual(h.goal().verification.allow, ['example.com']);
+  await h.tool('goal_environment', { ...key, network: 'open' });
+  assert.equal(asks, 3);
+  assert.equal(h.goal().verification.network, 'allowlist');
+});
+
+test('Docker preflight failure prevents checks and auditing', async (t) => {
+  const h = await harness(t, {
+    prepareVerification: async () => {
+      throw new SandboxError('sbx unavailable');
+    },
+    audit: async () => assert.fail('audit cannot run without frozen inputs'),
+  });
+  h.rt.settings.sandbox = { backend: 'docker-sandboxes' };
+  await start(h);
+  await evidence(h);
+  const g = h.goal();
+  const result = await h.tool('goal_submit', {
+    goal_id: g.id,
+    generation: g.generation,
+    summary: 'done',
+  });
+  assert.match(result.content[0].text, /sbx unavailable/);
+  assert.equal(h.goal().status, 'active');
+  assert.equal(h.goal().consecutiveAuditFailures, 0);
+  assert.equal(h.goal().consecutiveEnvironmentFailures, 1);
 });

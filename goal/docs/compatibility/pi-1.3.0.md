@@ -1,5 +1,7 @@
 # Pi 1.3.0 compatibility review
 
+> Historical upgrade record. Version pairs, counts and “now” statements describe that review date. See the [support window](support-window.md) and [current receipts](../../verification/results/compatibility.json) for the maintained versions and latest evidence.
+
 Reviewed on 2026-10-16 on Linux x86-64 with Node.js 22.23.3, npm 10.9.9 and installed official Pi 1.2.0 / 1.3.0 releases. Pi's 1.3.0 changelog is dated 2026-10-15 and lists 1.2.0 immediately below it.
 
 ## Result and maintenance changes

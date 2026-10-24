@@ -8,12 +8,15 @@ export function verifyCoverage(
   rows = JSON.parse(readFileSync(join(root, 'verification/coverage.json'), 'utf8')),
 ) {
   const cases = JSON.parse(readFileSync(join(root, 'verification/cases.json'), 'utf8'));
-  const sourceFiles = [
-    'extensions/index.ts',
-    ...readdirSync(join(root, 'src'))
-      .filter((f) => f.endsWith('.ts'))
-      .map((f) => `src/${f}`),
-  ];
+  const sourceFiles = ['extensions/index.ts'];
+  const collect = (directory) => {
+    for (const entry of readdirSync(join(root, directory), { withFileTypes: true })) {
+      const file = `${directory}/${entry.name}`;
+      if (entry.isDirectory()) collect(file);
+      else if (/\.(ts|mjs)$/.test(entry.name)) sourceFiles.push(file);
+    }
+  };
+  collect('src');
   assert.equal(new Set(rows.map((r) => r.id)).size, rows.length, 'Duplicate coverage row');
   for (const source of sourceFiles)
     assert.ok(

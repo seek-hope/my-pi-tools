@@ -1,0 +1,29 @@
+name: Docker Sandboxes acceptance
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: goal-microvm-acceptance
+  cancel-in-progress: false
+
+jobs:
+  microvm:
+    # A dedicated authenticated machine with working virtualization and a reviewed profile.
+    # Missing capabilities must fail this job; ordinary hosted CI runs the unit suite only.
+    runs-on: [self-hosted, linux, docker-sandboxes]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22.x"
+      - name: Run real microVM acceptance
+        env:
+          GOAL_SANDBOX_CONFIG: ${{ vars.GOAL_SANDBOX_CONFIG }}
+        run: |
+          test -n "$GOAL_SANDBOX_CONFIG"
+          node goal/scripts/check-sandbox.mjs --run "$GOAL_SANDBOX_CONFIG"

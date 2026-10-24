@@ -1,12 +1,12 @@
 # Control protocol verification report
 
-Latest complete TLC/implementation receipt: **2026-10-22T00:15:40.490Z**. Dual-host receipt: **2026-10-22T00:14:41.114Z**.
+Current timestamps and source hashes are recorded in the [TLC/implementation receipt](results/summary.json) and [dual-host receipt](results/compatibility.json). These receipts, rather than duplicated counts or dates below, determine whether evidence matches the current tree.
 
-All **76 configurations met their expected outcome**: **16 positive checks** passed and **60 deliberate fault/missing-assumption controls** produced their specified counterexamples. Fourteen bounded implementation groups completed **399,119 assertions**. Pi **1.3.0 and 1.4.0 each ran 128 tests** (127 passed, one platform-specific sandbox test skipped on Linux), TypeScript checks and isolated extension loading. Formatting and the current CLI load passed. `verify:evidence` verified current source hashes, all TLC logs, the implementation receipt and both host logs.
+The matrix contains **76 configurations**: **16 positive checks** and **60 deliberate fault/missing-assumption controls**. Fourteen bounded implementation groups are enumerated in [contracts.json](results/contracts.json). Pi **1.3.0 and 1.4.0** are checked with types, the full suite and isolated extension loading; test counts and outcomes are in their receipt and logs. Ordinary CI no longer skips bubblewrap capability tests: that executor has been removed. Real Docker Sandboxes checks are recorded separately in [microVM acceptance](../docs/docker-sandboxes-acceptance.md), outside the formal composition scope. `verify:evidence` checks source hashes, TLC logs, the implementation receipt and both host logs.
 
 The review found gaps in the former five-model coverage: permission confirmation, accounting/stagnation, recovery decisions, context projection, detailed inspection, check cancellation and scheduling. Seven models, 36 configurations and direct implementation enumeration now supplement those areas. No new production defect was confirmed in that coverage review. The subsequent automatic-clear work exposed an omitted final-reply usage charge and fixed it, as described below. A RecoveryProtocol Boolean-assignment error was found and corrected before acceptance; this was a model-writing defect.
 
-The [inventory](COVERAGE.md) accounts for **13 production modules and 14 behavior rows**, including explicit exclusions. It checks registration consistency, not automatic semantic completeness. These are separate finite abstractions and finite implementation domains, with no composition or machine-checked TypeScript refinement theorem. They do not prove LLM judgment, arbitrary-size execution or unbounded termination. [Method and assumptions](README.md) define the scope.
+The [inventory](COVERAGE.md) accounts for **23 production modules and 15 behavior rows**, including explicit exclusions. It checks registration consistency, not automatic semantic completeness. These are separate finite abstractions and finite implementation domains, with no composition or machine-checked TypeScript refinement theorem. They do not prove LLM judgment, arbitrary-size execution or unbounded termination. [Method and assumptions](README.md) define the scope.
 
 ## Positive checks
 
@@ -139,7 +139,9 @@ At the automatic-clear revision, both supported hosts passed 105 tests and the m
 
 Real Pi 1.1.0 terminal checks exercised regular/fullscreen modes × dark/light themes, 80-column initial review, final-page access, resizing to 48 columns, cancel and accept, with a synthetic fixture and no model prompt. [Terminal captures](../docs/compatibility/approval-tui.txt) record the results. Fixture parsing was corrected before the successful run; no production change was needed for that fixture error.
 
-## Per-goal verification environments
+## Per-goal verification environments (historical implementation)
+
+This section records the earlier environment rollout. Its executor, host networking and variable-forwarding details have been superseded by the Docker Sandboxes backend. Current configuration and validation evidence are in [verification environments](../docs/verification-environment.md) and [microVM acceptance](../docs/docker-sandboxes-acceptance.md). The abstract VerificationProtocol remains applicable; it does not prove the new microVM or proxy implementation.
 
 Approved checks previously ran in one fixed posture: the host and project were read-only, networking was isolated, and `/tmp` was writable. Build, dependency-download and local-service checks could therefore fail for environmental reasons and be reported as implementation failures, consuming repair attempts. The earlier audit already recorded one such case: C5 used recorded host evidence because rebuilding inside the read-only sandbox was impossible.
 

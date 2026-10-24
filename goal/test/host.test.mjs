@@ -12,9 +12,9 @@ import {
   SettingsManager,
 } from '@earendil-works/pi-coding-agent';
 import { GoalRuntime } from '../src/runtime.ts';
+import { testSandbox, verificationFixture } from './sandbox-fixtures.mjs';
 import { activeGoal } from '../src/state.ts';
 import { WORK_RULES } from '../src/prompts.ts';
-import { sandboxAvailable } from './sandbox-capability.mjs';
 
 for (const { queuedInput, commandStart } of [
   { queuedInput: false, commandStart: false },
@@ -23,7 +23,7 @@ for (const { queuedInput, commandStart } of [
 ])
   test(
     `installed Pi host: ${commandStart ? 'command-triggered run' : 'model-created goal'} and verified auto-clear with ${queuedInput ? 'queued' : 'idle'} user input`,
-    { timeout: 15_000, skip: !sandboxAvailable },
+    { timeout: 15_000 },
     async (t) => {
       const cwd = mkdtempSync(join(tmpdir(), 'goal-host-test-'));
       const agentDir = join(cwd, 'agent');
@@ -267,8 +267,11 @@ for (const { queuedInput, commandStart } of [
         noContextFiles: true,
         extensionFactories: [
           (pi) => {
-            runtime = new GoalRuntime(pi, { agentDir });
+            runtime = new GoalRuntime(pi, { agentDir, prepareVerification: verificationFixture() });
             runtime.register();
+            pi.on('session_start', () => {
+              runtime.settings.sandbox = structuredClone(testSandbox);
+            });
             pi.on('before_agent_start', (event, ctx) => {
               starts.push({
                 messageType: event.messageType,

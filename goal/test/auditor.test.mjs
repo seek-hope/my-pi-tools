@@ -1,11 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, writeFileSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, symlinkSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runIndependentAudit, safeAuditPath } from '../src/auditor.ts';
-import { runCheck } from '../src/checks.ts';
-import { sandboxAvailable } from './sandbox-capability.mjs';
+
 import { applySpec, makeGoal, permissionDefaults } from '../src/state.ts';
 import { auditPrompt } from '../src/prompts.ts';
 import { defaults } from '../src/settings.ts';
@@ -410,37 +409,36 @@ test('bounded file reads report continuation and search locates distant evidence
   assert.equal(result.verdict, 'pass');
   assert.equal(result.tokens, 34);
 });
-test(
-  'approved command checks stay read-only, ignore legacy timeouts and honor cancellation',
-  { skip: !sandboxAvailable },
-  async (t) => {
-    const { cwd } = setup(t);
-    const valid = await runCheck(cwd, {
-      id: 'K1',
-      command: 'test "$(cat result.txt)" = complete',
-      timeoutSeconds: 5,
-    });
-    assert.equal(valid.exitCode, 0, valid.output);
-    const write = await runCheck(cwd, {
-      id: 'K2',
-      command: 'echo tampered > result.txt',
-      timeoutSeconds: 5,
-    });
-    assert.notEqual(write.exitCode, 0);
-    const unbounded = await runCheck(cwd, {
-      id: 'K3',
-      command: 'sleep 0.05; echo done',
-      timeoutSeconds: 0.001,
-    });
-    assert.equal(unbounded.exitCode, 0);
-    assert.match(unbounded.output, /done/);
-    const controller = new AbortController();
-    const running = runCheck(cwd, { id: 'K4', command: 'sleep 60 & wait' }, controller.signal);
-    controller.abort();
-    await assert.rejects(running, /cancelled/);
-    await assert.rejects(runCheck(cwd, { id: 'K5', command: 'true' }, controller.signal), /abort/i);
-  },
-);
+test('audit_check cannot execute on the host without a verification context', async (t) => {
+  const { cwd, goal } = setup(t);
+  goal.checks = [{ id: 'K1', command: 'touch should-not-exist' }];
+  let rejected = false;
+  await runIndependentAudit(
+    goal,
+    'done',
+    context(
+      cwd,
+      [
+        [call('audit_check', { id: 'K1' })],
+        [call('audit_read', { path: 'result.txt' })],
+        [verdict()],
+      ],
+      (input) => {
+        const result = input.messages.find(
+          (m) => m.role === 'toolResult' && m.toolName === 'audit_check',
+        );
+        if (result) {
+          assert.equal(result.isError, true);
+          assert.match(result.content[0].text, /frozen verification context/);
+          rejected = true;
+        }
+      },
+    ),
+    defaults,
+  );
+  assert.equal(rejected, true);
+  assert.equal(existsSync(join(cwd, 'should-not-exist')), false);
+});
 test('opt-in confirm policy distinguishes checks, installation, publication and paths outside project', (t) => {
   const { cwd } = setup(t);
   const policy = permissionDefaults('confirm');
@@ -455,4 +453,53 @@ test('opt-in confirm policy distinguishes checks, installation, publication and 
   ])
     assert.ok(permissionReason('bash', { command }, cwd, policy), command);
   assert.ok(permissionReason('write', { path: '/tmp/outside-goal.txt' }, cwd, policy));
+});
+
+test('auditor reads frozen files and delegates reruns through the same verification context', async (t) => {
+  const { cwd, goal } = setup(t);
+  const frozen = mkdtempSync(join(tmpdir(), 'goal-frozen-audit-'));
+  t.after(() => rmSync(frozen, { recursive: true, force: true }));
+  writeFileSync(join(frozen, 'result.txt'), 'frozen version\n');
+  goal.checks = [{ id: 'K1', command: 'approved command' }];
+  let checked = false,
+    readFrozen = false;
+  const verification = {
+    cwd: frozen,
+    identity: { backend: 'docker-sandboxes', snapshotDigest: 'fixture' },
+    check: async (check) => {
+      assert.equal(check.command, 'approved command');
+      checked = true;
+      return { exitCode: 0, output: 'independent rerun' };
+    },
+  };
+  const ctx = context(
+    cwd,
+    [
+      [call('audit_read', { path: 'result.txt' })],
+      [call('audit_check', { id: 'K1' })],
+      [verdict()],
+    ],
+    (input) => {
+      const record = input.messages.find(
+        (m) => m.role === 'toolResult' && m.toolName === 'audit_read',
+      );
+      if (record) {
+        assert.match(record.content[0].text, /frozen version/);
+        assert.doesNotMatch(record.content[0].text, /complete/);
+        readFrozen = true;
+      }
+    },
+  );
+  const result = await runIndependentAudit(
+    goal,
+    'done',
+    ctx,
+    defaults,
+    undefined,
+    undefined,
+    verification,
+  );
+  assert.equal(result.verdict, 'pass');
+  assert.equal(checked && readFrozen, true);
+  assert.deepEqual(result.verification, verification.identity);
 });

@@ -69,8 +69,8 @@
     },
     {
       "id": "environment",
-      "domain": "Workspace {readonly,ephemeral} x network {isolated,host} x env sets with duplicates; invalid configs; failure signatures.",
-      "assertions": 222,
+      "domain": "Workspace {readonly,ephemeral} x network {isolated,open} x env sets with duplicates; invalid configs; failure signatures.",
+      "assertions": 110,
       "passed": true
     },
     {

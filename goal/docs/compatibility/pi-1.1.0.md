@@ -1,5 +1,7 @@
 # Pi 1.1.0 compatibility review
 
+> Historical upgrade record. Version pairs, counts and “now” statements describe that review date. See the [support window](support-window.md) and [current receipts](../../verification/results/compatibility.json) for the maintained versions and latest evidence.
+
 Reviewed on 2026-10-08 using installed Pi releases **1.0.4** and **1.1.0**, Node.js 26.10.0 and npm 12.2.0 on Linux x86-64.
 
 This is the historical upgrade-only review (81 tests). The subsequent [model lifecycle update](../model-goals.md) changes creation, clearing, resumption and modification behavior and expands the suite to 90 tests; the current [verification report](../../verification/REPORT.md) records the new receipts.

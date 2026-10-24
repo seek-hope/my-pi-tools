@@ -5,9 +5,10 @@ import type { Context, Tool } from '@earendil-works/pi-ai';
 import { Type } from 'typebox';
 import { Check as schemaCheck } from 'typebox/value';
 import { auditPrompt } from './prompts.ts';
-import { runCheck } from './checks.ts';
+import { EnvironmentError } from './checks.ts';
 import { now, tokensFromUsage, type Audit, type AuditFinding, type Goal } from './state.ts';
 import type { Settings } from './settings.ts';
+import type { VerificationContext } from './verification/pipeline.ts';
 
 const tools: Tool[] = [
   {
@@ -95,6 +96,7 @@ export async function runIndependentAudit(
   settings: Settings,
   callerSignal?: AbortSignal,
   onProgress?: (message: string) => void,
+  verification?: VerificationContext,
 ): Promise<Audit> {
   const config = { ...settings.audit, ...goal.auditModel };
   const model =
@@ -105,7 +107,11 @@ export async function runIndependentAudit(
     usageUnknown = false,
     inspected = 0;
   const label = model ? `${model.provider}/${model.id}` : '(unavailable)';
-  const prompt = auditPrompt(goal, summary);
+  const prompt =
+    auditPrompt(goal, summary) +
+    (verification
+      ? `\nVerification backend: Docker Sandboxes. Input digest: ${verification.identity.snapshotDigest}. Read/search/list refer to this frozen input, not the live workspace. The host filesystem is not shared; each approved-check rerun uses a fresh VM.`
+      : '');
   const diagnostics: NonNullable<Audit['diagnostics']> = {
     requests: 0,
     initialPromptChars: prompt.length,
@@ -130,6 +136,7 @@ export async function runIndependentAudit(
     details: string,
     findings: AuditFinding[] = [],
   ): Audit => ({
+    ...(verification ? { verification: verification.identity } : {}),
     at: now(),
     verdict,
     details,
@@ -269,10 +276,12 @@ export async function runIndependentAudit(
           } else if (call.name === 'audit_check') {
             const check = goal.checks.find((c) => c.id === p.id);
             if (!check) throw new Error('Check is not in the approved scope');
-            output = JSON.stringify(await runCheck(ctx.cwd, check, signal, goal.verification));
+            if (!verification)
+              throw new EnvironmentError('Approved checks require a frozen verification context.');
+            output = JSON.stringify(await verification.check(check, signal));
             inspected++;
           } else {
-            const path = await safeAuditPath(ctx.cwd, String(p.path));
+            const path = await safeAuditPath(verification?.cwd ?? ctx.cwd, String(p.path));
             if (call.name === 'audit_list')
               output = (await readdir(path, { withFileTypes: true }))
                 .slice(0, 200)

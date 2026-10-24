@@ -30,7 +30,6 @@ import {
   DEFAULT_VERIFICATION,
   environmentSignature,
   normalizeVerification,
-  sandboxArgs,
   verificationKey,
   verificationSummary,
 } from '../src/checks.ts';
@@ -558,11 +557,11 @@ group(
 );
 group(
   'environment',
-  'Workspace {readonly,ephemeral} x network {isolated,host} x env sets with duplicates; invalid configs; failure signatures.',
+  'Workspace {readonly,ephemeral} x network {isolated,open} x env sets with duplicates; invalid configs; failure signatures.',
   (check) => {
     const cwd = process.cwd();
     const workspaces = ['readonly', 'ephemeral'];
-    const networks = ['isolated', 'host'];
+    const networks = ['isolated', 'open'];
     const envSets = [[], ['PATH'], ['B', 'A'], ['PATH', 'PATH']];
     for (const [workspace, network, env] of product([workspaces, networks, envSets])) {
       const config = { workspace, network, env };
@@ -581,44 +580,14 @@ group(
       );
       const summary = verificationSummary(config);
       check(
-        summary.includes(network === 'host' ? 'host network' : 'isolated network'),
+        summary.includes(network === 'open' ? 'open via HTTP/HTTPS proxy' : 'isolated network'),
         'summary states network capability',
       );
       check(
         summary.includes(workspace === 'readonly' ? 'read-only' : 'ephemeral'),
         'summary states workspace capability',
       );
-      const args = sandboxArgs(cwd, config, 'run-check');
-      check(args.includes('--unshare-all'), 'namespaces are always isolated');
-      check(
-        args.includes('--share-net') === (network === 'host'),
-        'host network only when declared',
-      );
-      check(
-        args.includes('--overlay-src') === (workspace === 'ephemeral') &&
-          args.includes('--tmp-overlay') === (workspace === 'ephemeral'),
-        'write access only through an ephemeral overlay',
-      );
-      const workspaceReadOnlyBind = args.some(
-        (arg, index) => arg === '--ro-bind' && args[index + 1] === cwd && args[index + 2] === cwd,
-      );
-      check(
-        args.some((arg, index) => arg === '--ro-bind' && args[index + 1] === '/'),
-        'the host root is bound read-only',
-      );
-      check(
-        workspaceReadOnlyBind === (workspace === 'readonly'),
-        'the host project is bound read-only outside ephemeral runs',
-      );
-      check(
-        args.includes('--tmpfs') && args.includes('--dev') && args.includes('--proc'),
-        'temporary storage, devices and proc are bounded',
-      );
-      check(args.at(-1) === 'run-check' && args.at(-2) === '-c', 'the approved command is last');
-      check(
-        !args.includes('--bind') && !args.includes('--dev-bind'),
-        'no writable host bind exists',
-      );
+      check(summary.includes('host filesystem: not mounted'), 'host filesystem is never exposed');
     }
     check(
       JSON.stringify(normalizeVerification(undefined)) === JSON.stringify(DEFAULT_VERIFICATION),
@@ -643,8 +612,8 @@ group(
       'isolated network is suggested for a network failure',
     );
     check(
-      !environmentSignature(networkPattern, { ...DEFAULT_VERIFICATION, network: 'host' }, 6),
-      'no network advice when host network is already declared',
+      !environmentSignature(networkPattern, { ...DEFAULT_VERIFICATION, network: 'open' }, 6),
+      'no network advice when open egress is already declared',
     );
     const readonlyPattern = 'cannot create output: Read-only file system';
     check(

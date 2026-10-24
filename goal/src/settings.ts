@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { sandboxSettings, type SandboxSettings } from './verification/contract.ts';
 import {
   DEFAULT_LIMITS,
   permissionDefaults,
@@ -17,6 +18,7 @@ export interface Settings {
     thinking?: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
   };
   permissions: PermissionPolicy;
+  sandbox?: SandboxSettings;
 }
 export const defaults: Settings = {
   limits: DEFAULT_LIMITS,
@@ -36,8 +38,14 @@ export function loadSettings(cwd: string, agentDir: string): Settings {
       (!raw.permissions || typeof raw.permissions !== 'object' || Array.isArray(raw.permissions))
     )
       throw new Error(`Invalid permissions configuration: ${file}`);
+    if (raw.sandbox !== undefined && file !== join(agentDir, 'my-pi-goal.json'))
+      throw new Error(
+        'sandbox configuration is personal-only; project settings cannot select host executables or images',
+      );
+    const sandbox = raw.sandbox !== undefined ? sandboxSettings(raw.sandbox) : result.sandbox;
     permissions = { ...permissions, ...raw.permissions };
     result = {
+      ...(sandbox ? { sandbox } : {}),
       limits: normalizeLimits({ ...result.limits, ...raw.limits }),
       audit: { ...result.audit, ...raw.audit },
       permissions: { ...permissionDefaults(permissions.mode), ...permissions },

@@ -13,6 +13,7 @@ import {
   VERSION,
 } from '@earendil-works/pi-coding-agent';
 import { GoalRuntime } from '../src/runtime.ts';
+import { testSandbox, verificationFixture } from './sandbox-fixtures.mjs';
 import { activeGoal } from '../src/state.ts';
 
 for (const reopen of [false, true])
@@ -163,8 +164,11 @@ for (const reopen of [false, true])
         noContextFiles: true,
         extensionFactories: [
           (pi) => {
-            runtime = new GoalRuntime(pi, { agentDir });
+            runtime = new GoalRuntime(pi, { agentDir, prepareVerification: verificationFixture() });
             runtime.register();
+            pi.on('session_start', () => {
+              runtime.settings.sandbox = structuredClone(testSandbox);
+            });
             pi.on('tool_execution_end', (event) => toolEnds.push(event));
           },
         ],

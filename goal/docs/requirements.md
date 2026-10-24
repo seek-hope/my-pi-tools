@@ -31,7 +31,7 @@ Three interview rounds established the original scope; the user twice approved t
 | Queue | FIFO, per-goal approval, explicit skip, pause and history retention |
 | Amendments | Record ordinary messages; goal_plan proposes changes even while paused/blocked; every approved-spec modification, including task changes, requires user approval |
 | Permissions | Autonomous by default; explicit network/install ask and host/user restrictions remain effective; optional confirm mode |
-| Verification | Approved checks and independent reruns use a per-goal declared environment: read-only or ephemeral workspace, isolated or host network and named host variables; environment failures never count as implementation repairs or completion |
+| Verification | Approved checks and independent reruns use a per-goal declared environment: read-only or ephemeral workspace, isolated, allowlisted or open proxy egress with deny rules; environment failures never count as implementation repairs or completion |
 | Model lifecycle | goal_create creates with session/revision fencing; goal_resume continues approved work after a new user instruction; neither tool approves modifications or bypasses stops |
 | Commands | Create, add, approve, pause, resume and clear in main help; /goal shows state; panel/skip/settings in detailed help; old English shortcuts remain compatible |
 | UI | Theme-aware English card, separate task/evidence indicators, bounded detail, narrow-width/height support, persistent session-local visibility |
@@ -43,7 +43,7 @@ Three interview rounds established the original scope; the user twice approved t
 | Distribution | Private local Pi package registered globally, not an npm release |
 | Compatibility | Public Pi APIs; only current and immediately preceding releases (1.4.0/1.3.0), exact peer ranges, entry guard and isolated dual-version checks |
 
-The latest budget decision supersedes the earlier 200-turn/12-hour suggestion. Execution/audit turn and time caps, separate audit tokens, check timeouts, response output caps and diagnosis deadlines are removed, including for old configurations. Native provider/host limits, cancellation, scope approval, fail-closed sandboxing with declared per-goal capabilities, paging and journal resource limits remain. A configured token budget includes repeated input and cache usage and may overshoot; it is not a hard monetary cap.
+The budget decision superseded the earlier 200-turn/12-hour suggestion: execution/audit turn caps, overall goal/audit time caps, separate audit tokens and diagnosis deadlines remain removed, including for old configurations. The Docker Sandboxes backend adds separate per-operation deadlines, bounded output and CPU/memory/process limits to contain disposable verification workloads; these do not impose an overall goal execution budget. Native provider/host limits, cancellation, scope approval, paging and journal resource limits also remain. A configured token budget includes repeated input and cache usage and may overshoot; it is not a hard monetary cap.
 
 Autonomous execution supersedes the early network/install/per-tool approval recommendation. It authorizes routine work within approved scope, not arbitrary unrelated effects. Policies persist per goal. Material specification approval and independent verification remain explicit boundaries.
 
@@ -55,7 +55,7 @@ Session isolation supersedes the former directory-shared journal/manual takeover
 
 [Example specifications](../examples/goal-specs.json) are explicitly synthetic: CSV export repair, descriptive analysis of synthetic data, and a local JSON task CLI. They do not represent completed user research. Integration tests use temporary workspaces and offline providers, not paid API calls.
 
-- Read-only checks are enforced by Linux bubblewrap and restricted audit tools, not merely a prompt.
+- Read-only checks are enforced by Docker Sandboxes microVMs, restricted check containers and audit tools, not merely a prompt.
 - Optional main-agent permission checks are cooperative and cannot detect all side effects of arbitrary scripts.
 - Recorded progress and model findings are judgments; an arbitrary completion percentage never lowers acceptance criteria.
 - A live writer is not forcibly displaced while shell/tool work may still run. Unknown cross-host liveness is treated conservatively.

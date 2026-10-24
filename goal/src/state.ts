@@ -32,6 +32,7 @@ export interface Check {
   last?: CheckResult;
 }
 export interface CheckResult {
+  verification?: import('./verification/contract.ts').VerificationIdentity;
   at: string;
   command: string;
   exitCode: number;
@@ -49,6 +50,7 @@ export interface AuditFinding {
   evidence: string;
 }
 export interface Audit {
+  verification?: import('./verification/contract.ts').VerificationIdentity;
   at: string;
   verdict: 'pass' | 'fail' | 'error';
   details: string;
