@@ -1,8 +1,8 @@
 {
-  "schemaVersion": 2,
-  "completedAt": "2026-10-24T05:56:10.614Z",
+  "schemaVersion": 3,
+  "completedAt": "2026-10-24T08:11:38.734Z",
   "passed": true,
-  "caseCount": 14,
+  "caseCount": 16,
   "platform": {
     "os": "CachyOS Linux",
     "architecture": "amd64",
@@ -13,60 +13,60 @@
     "earlierProbe": {
       "sbx": "0.48.0",
       "guestKernel": "7.0.14",
-      "note": "Earlier offline smoke only. All numbered batches below started after the daemon/client changed to 0.49.2, confirmed from daemon request logs."
+      "note": "Historical offline smoke only; see the source-v1 receipt at the prior commit."
     }
   },
   "run": {
     "startIndex": 0,
-    "at": "2026-10-24T05:46:37.029Z",
+    "at": "2026-10-24T07:59:11.072Z",
     "platform": "linux",
     "cliVersion": "sbx version v0.49.2 5d40fd43027b33ed1f1a39c14fb07e2503d6998f",
     "sourceHashes": {
       "extensions/index.ts": "347e7d4082b589bb333ba34406a205a79ee27ee2212843b02da8c6aeaf882915",
-      "package-lock.json": "bb746614ff9f0122b6b82224bff760e326553a6d80c07aff75c0da053c979d2b",
-      "package.json": "f12fbaaad5b2594d08f07ab63d80d2d2812521d27c921662e603a58b14789511",
+      "package-lock.json": "7997b13eb862c9c9dd9f098b7f40c91fa7d5680340e25f22d3396ed538369620",
+      "package.json": "846dbc71b0b514c6effa0a69c5c846e66608e885e8bd4091c16a7ea257cf0cd9",
       "scripts/check-compat.mjs": "092701d8aaa6225d173b75571d6ade57e12ddde21dce365cc1dedb5db362da09",
       "scripts/check-load.mjs": "b554f445daffcfb83e18f9a731264f7657fa54cb5700bb594a456e4af4d2f184",
-      "scripts/check-sandbox.mjs": "ce46b0c92f8d06184f07f607850f6f1a9f393f6702766ea811982aae160493bd",
+      "scripts/check-sandbox.mjs": "7e0a239b2ecfe89336ceaa31ca662f4b6975506610e33cd2acf82344dd531b69",
       "scripts/link-host.mjs": "c01e3db2d0902329c6398669bbfce100e88acc6ece1165820ff11bcee3012c9a",
       "scripts/verification-sources.mjs": "d8ce137ca19f823918b456fca187a22c2dac481e59cb4109dbeb4668d456d6df",
-      "scripts/verify-contracts.mjs": "e4b8f68da8d663abb3675047ac26a61fc360488b72e5c457f9c04d652b51a2b3",
+      "scripts/verify-contracts.mjs": "1f3bb3004b6cb385568bf858a47fd085724a1c927ff8b4418300ab680dfe7624",
       "scripts/verify-coverage.mjs": "8ef04fc083d49a546dd21ead580689f025d6963469f9e2fc9b5a66d783d2155d",
       "scripts/verify-formal.mjs": "110f3431672bf8a0cf55171bb691bc2cbb5c51865edb1fa037ea81bead4d6078",
       "src/approval.ts": "34171f50e164799f0ba09ca51577581a1aaae130cfb9d98db9915c0139590e7a",
       "src/auditor.ts": "99bc5526c683a3ccc474b8f85dbd0719689ef96699435e29462b30e0fe253a8c",
-      "src/checks.ts": "b4f6181ccce75530c7f07bdb8e98b9f53ccfa776c2fcd272e6f8ee8a589cacec",
+      "src/checks.ts": "9e799a24d6d4291e7d75fa3dad1e26706a3b3cd9ff2e93cf686a95f11f7a29a0",
       "src/compatibility.ts": "5876df63abb088b735314850475bd1cbcef0d5b9f83582c1f5d6bce18291fc05",
       "src/permissions.ts": "09cdaddc47c95b5cbdcf50670d019079b7004ac6709d4031cafd8c93a66a6d0d",
-      "src/prompts.ts": "3d488be41cad33ba9a0f23f7d2091821d402bb42baa883da5bc1f69e470244eb",
-      "src/runtime.ts": "2faf25058cdf2549d993497b32bac747bcf9a2ca9d1b89d1c51a33085757de84",
+      "src/prompts.ts": "52063b8adeb9ea759d3adade510ee8bb30dbf6b535887122e0aeb651fcb9a84e",
+      "src/runtime.ts": "d16f88dd1a2022488b7b083de136eadd06a4e121489ef438a548d8e13b672ad6",
       "src/settings.ts": "8ddb63efb69f414d7846a867763a2edd2050217afbe1d8e6fbe625ebcfc34403",
       "src/stagnation.ts": "80bde0219474537397985ca52b7770e58d1a00f9cb7abed8c212de4ca6d65d55",
       "src/state.ts": "f254b9f303b6b983fff498d6207bb094b4ae6a981855e8f74b66a3077818a73c",
       "src/store.ts": "54615fb5821c9c501b1a4647c24d6c52673f56e81ced66b542b00be115a02406",
       "src/tui.ts": "4bacfd98bad47c07e626aad000509f6da04c924ce9a4b9c3ec5d3b1ce5e2c44e",
-      "src/verification/contract.ts": "299fa34c1214e7de92dbaaab3960ee6b54b61e91ba33b2c9f07bef4a8dfa55e5",
-      "src/verification/docker-sandboxes.ts": "824e9142bf7d25fda919d4a536a0a4da15044513e99b2d9d0567ff401569ddd6",
+      "src/verification/contract.ts": "ed72d9efcd12e66eab5de6c58c9eaed6e70a91514bfd0ab7870c5fa844797453",
+      "src/verification/docker-sandboxes.ts": "69e724b5441ca474e10f78a3a33ea8a2187b05d68f0f25416412ccee777c0108",
       "src/verification/leases.ts": "468a6aa4323c20c2277eeccc6425bb12ddc64d1eaaf94bd98665a4a28322e1a1",
-      "src/verification/pipeline.ts": "45aaa0b230fb1d9f6e8a98a951acbf850617513cd69fa0f26a7adb3cb93fe97c",
+      "src/verification/pipeline.ts": "fbe76fde4e5b02a81529e06d175cfccc912c740407956c88b9d395a4685bfa30",
       "src/verification/process.ts": "2fbab1cfaf59197b628e5af1addaeec592d03aa3500ab3592659bb756403826c",
       "src/verification/proxy.mjs": "345beccdbad35cbb2793daf2090817089eddd76cae7990ca6b7fa4c3e01a6f82",
-      "src/verification/runner.mjs": "f34f5279fe1d5930c935ea504c7b291b16db88f7969502dc7c9d32aedc848882",
-      "src/verification/snapshot.ts": "80ed594a774a94642fc2580df07470c1aa991f4df07b7ad533e33043d80e6c3a",
+      "src/verification/runner.mjs": "e95215de8d4b60583472573801e9d3ab0587f934de1f09a98be8d09d6b759841",
+      "src/verification/snapshot.ts": "fd6e2d9a6b8bbf2e2398f633506da49a07678499d831480dfd706b6d1a3da997",
       "src/verification/watchdog.mjs": "161d66bb71311b6d910c9e938694d651ea0362932918156f6dfe133d55117cf6",
       "src/verification/watchdog.ts": "887c025cc736becd22c2e4c2bc8e5c7660995ccf7aeb5c1b7b84024ea235cd77",
       "test/approval.test.mjs": "75b8962da4497ac58c11215b2cde16340afb42035658ded71b5a4f4d7f3b57c3",
       "test/auditor.test.mjs": "d0ec819222708c2ab6ee87f78eb25295f21fabe0da121589aaa1a106c613489a",
-      "test/checks-env.test.mjs": "cafc34957c35a9cdc88093642d2021889bd4c4dcb54d26f03d33d45c1b3fa12a",
+      "test/checks-env.test.mjs": "6cb0b694566b58101afe88675aa7cf7b87c021fc2323ccad2c07bcff5914590d",
       "test/compatibility.test.mjs": "7cdbdff4eef6eb7219f64ec8f564b855cf68101d83db7ed7e399271fe5a337c8",
-      "test/docker-sandboxes.test.mjs": "dcfe88468f80cda052c900abd659d04cbeb3320ff742101bb84e4eb0302deb9b",
+      "test/docker-sandboxes.test.mjs": "aa68e7fe0c0b23a733b3603ace02d8f3b03652f4fb4ef24f88335102040f1357",
       "test/formal-runner.test.mjs": "b9f3e2f4f6c78dc1d9fb8611731b58e6afe7b080bcc20c75601c2ded0ca8532c",
       "test/host-cancellation.test.mjs": "5e73cd36d6a563558d2512212e91a8c8c88b6bf452f56e3a7f2fd29bf6916a0e",
       "test/host-lifecycle.test.mjs": "edd96b6f054bd1b402485ee0baaae8c7aa37575306c6dbf32bfac72c7cf122a5",
       "test/host.test.mjs": "c1854a65b145296a1da37b96a0c35f62884366afc76978a37aa326604e9c9d4c",
       "test/legacy-research.test.mjs": "dcbdb418f99c79021ba9ffec909b558080bb3faaad1ade83760889f67e8b49ed",
       "test/permissions.test.mjs": "4b6a574f5590baa7965c00c3954eae9b1a149632073813abb51feb8535401dd8",
-      "test/runtime.test.mjs": "5780dfb2f20285932c79d41a379578134d800bfc57298a18cffa65ea6e9f48d1",
+      "test/runtime.test.mjs": "393170a6ec11488d2c112f946b4d00ecde3900d57ca24c347a063280225ffe1b",
       "test/sandbox-fixtures.mjs": "0ca85cdc1bcb20ff57054e1d4b634046181249a202e0c78c6c82fab66f54b1cb",
       "test/sandbox-network.test.mjs": "51207ff855feaf0a114379e732624d4d275267aa2f3e44123ecd0c0d4cafb39d",
       "test/sandbox-watchdog.test.mjs": "24efb907d00b3ec4a8a346229f46acbefa70929f42fa21384a2f26f8609b3112",
@@ -74,11 +74,11 @@
       "test/stagnation.test.mjs": "555f32d91f9a6634ff62d3f83dc0cb4bc1b30b3425c4e4402d108b57385eac46",
       "test/state-store.test.mjs": "38c87e41dae1466083c19fbb95dc2461f5f3bfed0e37db1a36b8d02135d7500e",
       "test/tui.test.mjs": "2b2dc1b782ece6d6b8448ed86491f7ffef0f24ed52d9aa575c1f177f038c854a",
-      "test/verification-snapshot.test.mjs": "c61a4823c23778a2cce09157b50f402121cf4ab4e44d47287f575b0b2af6d617",
+      "test/verification-snapshot.test.mjs": "5799a560277992053e6c8982d5806488b41af6baf02aa057cdaf97d0411edf14",
       "verification/AccountingProtocol.tla": "367d718680260dd0c4359b85548195eecf2dc78b2198bab182c0fefdcfdeb0e7",
       "verification/AuditProtocol.tla": "95ef1a2b2d3d2a37e410d4307044ae790b4285920a16f1e74a12f64ac18a915a",
       "verification/AutoClearProtocol.tla": "1af042cbdb5bc833a612daf97b6f9fa42605c321873304575db6cdc8ce215a62",
-      "verification/COVERAGE.md": "110f3adf57bacbc742fea70a8d3014050b2bca96c813268cbfbe9ee59f249b68",
+      "verification/COVERAGE.md": "22201ab6fbf824f550ab7bf368a6fbc03172fb97d6d035bab25e39ee232fef79",
       "verification/CheckProtocol.tla": "c8964ba14e7ca74e6ced849c8b4aebb1c269e3b9c5e1ee31891cd0114fda79b0",
       "verification/ContextProtocol.tla": "a7960a7e6a5ed8d2f98beb189f09723a99c17e29e7d59a91badd561279075df2",
       "verification/InspectionProtocol.tla": "2d5bef838347e6484132dc8afb4016b0db18925c915ccb5501bf39feff2e9861",
@@ -122,7 +122,7 @@
       "verification/context-policy.cfg": "6a71bc511a9fbee6986a7fb202af9af980a966806186d48a162a17b7f2fe222a",
       "verification/context-stale.cfg": "2981df38077f43e0afa49b44edcb83359979df97ec73933fdcba7c42e27803ac",
       "verification/context.cfg": "db3867c3b41f5d649b55c69dc6d6f3aaa94eeef0b3e6eabd92983638f354284d",
-      "verification/coverage.json": "0ca103bf49c9d1c0e342675b2142ff6468d8802d7e28f15b27c4233bf08bdcf6",
+      "verification/coverage.json": "dbc2d6075ba8ea64a1077229260a4554b4000c50a949d5c5104483541b06de73",
       "verification/inspection-batch.cfg": "bd64c595d6655d15c428a26ae85268d4a9766911880de644d83d45170e618e20",
       "verification/inspection-coverage.cfg": "729a8cba87e4e57f76faef02483d3f4575fd834813b382fda5717a1f26aa8269",
       "verification/inspection-path.cfg": "0a153ea9f763d6d1d73a4cc8624e2e8b50dc5d6a9dc21fd7953822f239c7c95b",
@@ -173,59 +173,179 @@
     "cases": [
       {
         "name": "readonly denies writes",
-        "passed": true
+        "passed": true,
+        "verification": {
+          "backend": "docker-sandboxes",
+          "attemptId": "b1211ea9-4eca-4714-a08a-0fe81062b788",
+          "snapshotDigest": "42ee567097bc03f746a038969716fd48a48ccb10d06329d28db03da9eeca6634",
+          "environmentDigest": "bc0aef022921c4f1cc66d779854312d18c4ec1ee43263a314550d8a8fcc5fd8c",
+          "specDigest": "e5d9b28c30b84d3be675ab16c7e1d373d87582f7380d830dfeca600f7f6dcd3c"
+        }
       },
       {
         "name": "ephemeral writes never affect host",
-        "passed": true
+        "passed": true,
+        "verification": {
+          "backend": "docker-sandboxes",
+          "attemptId": "1c8118d6-9c3b-4b55-b7cc-bc7aa80639e0",
+          "snapshotDigest": "42ee567097bc03f746a038969716fd48a48ccb10d06329d28db03da9eeca6634",
+          "environmentDigest": "eee31c3448c0dd302fe23e8ddebe42e0f0b2f22aee1349bc3793bff8474e0124",
+          "specDigest": "6914c5efabd0896872ba32bbf50d7d3a4da6fdbe2e031ce4ec6f56b8f55ff4cb"
+        }
       },
       {
         "name": "host file, sockets and credentials absent",
-        "passed": true
+        "passed": true,
+        "verification": {
+          "backend": "docker-sandboxes",
+          "attemptId": "f73dd3d9-7275-4ef0-9b65-b2609ac1ba5b",
+          "snapshotDigest": "42ee567097bc03f746a038969716fd48a48ccb10d06329d28db03da9eeca6634",
+          "environmentDigest": "bc0aef022921c4f1cc66d779854312d18c4ec1ee43263a314550d8a8fcc5fd8c",
+          "specDigest": "1ba9f6be88b572e6c082ee31c043c3cd97e0fdc55bead3e0bc9f25ddfc7f825c"
+        }
       },
       {
         "name": "offline has no external TCP route",
-        "passed": true
+        "passed": true,
+        "verification": {
+          "backend": "docker-sandboxes",
+          "attemptId": "363187d1-3409-4abb-b372-9129e71b8228",
+          "snapshotDigest": "42ee567097bc03f746a038969716fd48a48ccb10d06329d28db03da9eeca6634",
+          "environmentDigest": "bc0aef022921c4f1cc66d779854312d18c4ec1ee43263a314550d8a8fcc5fd8c",
+          "specDigest": "79be6b4f59c48d10dd3d3edec7d34866b5ce82499f1c2f4919e38e00f72abaa9"
+        }
       },
       {
         "name": "allowlist permits HTTPS npm download with trusted CA",
-        "passed": true
+        "passed": true,
+        "verification": {
+          "backend": "docker-sandboxes",
+          "attemptId": "ac2461bc-2391-474f-aa25-bf7a54bd2f5e",
+          "snapshotDigest": "42ee567097bc03f746a038969716fd48a48ccb10d06329d28db03da9eeca6634",
+          "environmentDigest": "1baa08e2e216793f7d06636c67911e93b06fe50678b6bed6342916ea791946c5",
+          "specDigest": "ae8389145b60b2dc2fb2cb6fcb5e072f5a9710d1d8ebb3392f82b9dfc4aa1a89"
+        }
       },
       {
         "name": "allowlist blocks unrelated domain",
-        "passed": true
+        "passed": true,
+        "verification": {
+          "backend": "docker-sandboxes",
+          "attemptId": "676c373f-8717-406d-a304-86f4374bf160",
+          "snapshotDigest": "42ee567097bc03f746a038969716fd48a48ccb10d06329d28db03da9eeca6634",
+          "environmentDigest": "9c0d229045065abc2190ad2513b1feb13739eda5c3c9b140a6ebf3860ca0f923",
+          "specDigest": "74b6b8b4f03f3bce54992ea17e436deeb5a92e299f5be5cf896c05c53a0b607a"
+        }
       },
       {
         "name": "open permits public HTTP",
-        "passed": true
+        "passed": true,
+        "verification": {
+          "backend": "docker-sandboxes",
+          "attemptId": "6d13d9ff-08dd-4fb2-bd92-0f351428281c",
+          "snapshotDigest": "42ee567097bc03f746a038969716fd48a48ccb10d06329d28db03da9eeca6634",
+          "environmentDigest": "33ccbfbc35699037f84cb50ab290521cc3df847ea89a1e070de21307188d9fd4",
+          "specDigest": "b53a499f25e00ba4f241775e621041b204620a987979ef1475912cf5af452caa"
+        }
       },
       {
         "name": "deny takes precedence in open mode",
-        "passed": true
+        "passed": true,
+        "verification": {
+          "backend": "docker-sandboxes",
+          "attemptId": "98d9afb7-8df6-406a-8638-3166abffa738",
+          "snapshotDigest": "42ee567097bc03f746a038969716fd48a48ccb10d06329d28db03da9eeca6634",
+          "environmentDigest": "db5a5ca3539410dfa8e5b05d2f6da780cc9bb0f96262f391ca275e15ccf087f7",
+          "specDigest": "017414917d9febd0718a4ef4430e245db1f751da90d0cd9cdeb4715deadb421f"
+        }
       },
       {
         "name": "online cannot bypass proxy using direct TCP or VM services",
-        "passed": true
+        "passed": true,
+        "verification": {
+          "backend": "docker-sandboxes",
+          "attemptId": "d1f12b9d-3362-4ee0-85f0-67b2fc1e77ae",
+          "snapshotDigest": "42ee567097bc03f746a038969716fd48a48ccb10d06329d28db03da9eeca6634",
+          "environmentDigest": "33ccbfbc35699037f84cb50ab290521cc3df847ea89a1e070de21307188d9fd4",
+          "specDigest": "0e0b87147f78cd8b14fedd5a0176b6c4eb065f781e4449da8105a81d9bfc53c8"
+        }
       },
       {
         "name": "online DNS cannot bypass proxy",
-        "passed": true
+        "passed": true,
+        "verification": {
+          "backend": "docker-sandboxes",
+          "attemptId": "0ecc5bd0-d0a0-4559-adc6-f824a2f0e700",
+          "snapshotDigest": "42ee567097bc03f746a038969716fd48a48ccb10d06329d28db03da9eeca6634",
+          "environmentDigest": "33ccbfbc35699037f84cb50ab290521cc3df847ea89a1e070de21307188d9fd4",
+          "specDigest": "9f7aeb1b1dc94edf77feaaef5542c4da74db411d813b5a2b39089556436a1f39"
+        }
       },
       {
         "name": "check stdout cannot forge supervisor success",
-        "passed": true
+        "passed": true,
+        "verification": {
+          "backend": "docker-sandboxes",
+          "attemptId": "7698af4f-33ab-494a-9e08-b7ea35e81f12",
+          "snapshotDigest": "42ee567097bc03f746a038969716fd48a48ccb10d06329d28db03da9eeca6634",
+          "environmentDigest": "bc0aef022921c4f1cc66d779854312d18c4ec1ee43263a314550d8a8fcc5fd8c",
+          "specDigest": "08da177d884dfc3f66599b59ce805a5c499af34e0419555ecffca82b81f64805"
+        }
       },
       {
         "name": "cancellation removes running VM",
-        "passed": true
+        "passed": true,
+        "verification": {
+          "backend": "docker-sandboxes",
+          "attemptId": "d77e45f9-e1e9-4fa5-9785-b32502e7f94b",
+          "snapshotDigest": "42ee567097bc03f746a038969716fd48a48ccb10d06329d28db03da9eeca6634",
+          "environmentDigest": "bc0aef022921c4f1cc66d779854312d18c4ec1ee43263a314550d8a8fcc5fd8c",
+          "specDigest": "f8787741943f48315f5fb69f2e4eee272e4c0aea6a3d15c2b87db964a4a6fb51"
+        }
       },
       {
         "name": "output flood is bounded and cleaned",
-        "passed": true
+        "passed": true,
+        "verification": {
+          "backend": "docker-sandboxes",
+          "attemptId": "6eea2fee-6148-4d1f-9a77-f80315f79a2f",
+          "snapshotDigest": "42ee567097bc03f746a038969716fd48a48ccb10d06329d28db03da9eeca6634",
+          "environmentDigest": "bc0aef022921c4f1cc66d779854312d18c4ec1ee43263a314550d8a8fcc5fd8c",
+          "specDigest": "dbfb87ab2128f36e1195afc27a028025d5baba3755d673dd055b29b677606424"
+        }
       },
       {
         "name": "runner deadline failure cleans VM",
-        "passed": true
+        "passed": true,
+        "verification": {
+          "backend": "docker-sandboxes",
+          "attemptId": "df34c951-2c8f-4784-bc5c-4dd98858cbab",
+          "snapshotDigest": "42ee567097bc03f746a038969716fd48a48ccb10d06329d28db03da9eeca6634",
+          "environmentDigest": "791cffb28ac62cacddfcd2a42315d00fe0cc00cc8ab49db7cb11bf0ff2a4a093",
+          "specDigest": "114c78d84dcf5c6958543f7de92eaa33bcf4f06a25b6de9de173fcecb0e22233"
+        }
+      },
+      {
+        "name": "selected relative links and independent hardlink copies survive VM transfer",
+        "passed": true,
+        "verification": {
+          "backend": "docker-sandboxes",
+          "attemptId": "209b3877-f79e-47ae-9997-cac6dddc8ced",
+          "snapshotDigest": "42ee567097bc03f746a038969716fd48a48ccb10d06329d28db03da9eeca6634",
+          "environmentDigest": "bc0aef022921c4f1cc66d779854312d18c4ec1ee43263a314550d8a8fcc5fd8c",
+          "specDigest": "57b6727b129ee02bb290c9b50ea2c7ce32487cff85bf4e2a53a709c50e41b34c"
+        }
+      },
+      {
+        "name": "offline npm install build and test with explicit values and approved fixtures",
+        "passed": true,
+        "verification": {
+          "backend": "docker-sandboxes",
+          "attemptId": "4cc8f560-74dd-4be7-970a-743933ff28d4",
+          "snapshotDigest": "7fb12c9415382cd45f0e7a775b49b4830bf8bce09e2975a409f2c77a978cb1bb",
+          "environmentDigest": "39817ea7f659eddb23eec94047665790b50526921af06303dd65369997c26463",
+          "specDigest": "2e8ba113f0f5112cbc5b7c01f83b7b4e76f9a2c9f03cc8e742ac71b45f72621f"
+        }
       }
     ],
     "settings": {
@@ -233,14 +353,14 @@
       "imageId": "sha256:de170b39439eb0e5a3444ad7d60b015614a381e10fecae2e30ec9e735122f38d",
       "imageArchiveSha256": "ed48a8c2b18f4155b135a18c3733dbe964b36ec85fd91c79e6173c8248c9f3df"
     },
-    "completedAt": "2026-10-24T05:56:10.614Z",
+    "completedAt": "2026-10-24T08:11:38.734Z",
     "passed": true
   },
   "executionNotes": [
-    "All 14 cases passed in one uninterrupted invocation against the listed source hashes. The suite checked those hashes again before recording completion.",
-    "Case 8 checks deny precedence for both the ordinary DNS name and the equivalent name with a trailing root dot.",
-    "Expected read-only environment failures remain environment failures when the verification context finishes; cleanup failures cannot be ignored by the acceptance harness.",
-    "Earlier batches below are historical evidence from before the review fixes; the full run above supersedes them."
+    "All 16 cases passed in one continuous invocation. The complete listed source hashes were unchanged from startup to completion.",
+    "Source-v2 permits selected internal hardlinks as independent byte copies and canonical internal relative symlinks. Every case ran with these links present in its source inputs.",
+    "Case 16 installs a local file dependency offline, builds an artifact and runs node:test via npm. It uses explicit CI/TZ values and exact project-bound fixture exceptions. Host node_modules and dist paths remain absent.",
+    "The full source fingerprint, final VM listing and empty lease directory were checked again after completion. No verification source changed afterward."
   ],
   "cleanup": {
     "ownedSandboxesRemaining": 0,
@@ -253,129 +373,9 @@
     "No real parent-SIGKILL or daemon-crash matrix, cross-platform certification, kernel exploit testing, or comprehensive IPv6/UDP attack coverage.",
     "The independent watchdog parent-exit path has a separate fake-CLI process regression."
   ],
-  "historicalBatches": [
-    {
-      "at": "2026-10-24T04:52:01.909Z",
-      "platform": "linux",
-      "cases": [
-        {
-          "name": "readonly denies writes",
-          "passed": true
-        },
-        {
-          "name": "ephemeral writes never affect host",
-          "passed": true
-        },
-        {
-          "name": "host file, sockets and credentials absent",
-          "passed": true
-        },
-        {
-          "name": "offline has no external TCP route",
-          "passed": true
-        },
-        {
-          "name": "allowlist permits HTTPS npm download with trusted CA",
-          "passed": true
-        },
-        {
-          "name": "allowlist blocks unrelated domain",
-          "passed": true
-        }
-      ],
-      "settings": {
-        "template": "docker.io/docker/sandbox-templates@sha256:b178ca62ec2e79af2a044e3ec321bdb72188690e1c15d573ea5524b397554d3d",
-        "imageId": "sha256:de170b39439eb0e5a3444ad7d60b015614a381e10fecae2e30ec9e735122f38d",
-        "imageArchiveSha256": "ed48a8c2b18f4155b135a18c3733dbe964b36ec85fd91c79e6173c8248c9f3df"
-      }
-    },
-    {
-      "startIndex": 6,
-      "at": "2026-10-24T04:57:21.424Z",
-      "platform": "linux",
-      "cases": [
-        {
-          "name": "open permits public HTTP",
-          "passed": true
-        },
-        {
-          "name": "deny takes precedence in open mode",
-          "passed": true
-        },
-        {
-          "name": "online cannot bypass proxy using direct TCP or VM services",
-          "passed": true
-        },
-        {
-          "name": "online DNS cannot bypass proxy",
-          "passed": true
-        },
-        {
-          "name": "check stdout cannot forge supervisor success",
-          "passed": true
-        },
-        {
-          "name": "cancellation removes running VM",
-          "passed": true
-        },
-        {
-          "name": "output flood is bounded and cleaned",
-          "passed": true
-        },
-        {
-          "name": "deadline kills descendants and cleans VM",
-          "passed": true
-        }
-      ],
-      "settings": {
-        "template": "docker.io/docker/sandbox-templates@sha256:b178ca62ec2e79af2a044e3ec321bdb72188690e1c15d573ea5524b397554d3d",
-        "imageId": "sha256:de170b39439eb0e5a3444ad7d60b015614a381e10fecae2e30ec9e735122f38d",
-        "imageArchiveSha256": "ed48a8c2b18f4155b135a18c3733dbe964b36ec85fd91c79e6173c8248c9f3df"
-      }
-    },
-    {
-      "startIndex": 11,
-      "at": "2026-10-24T05:03:59.111Z",
-      "platform": "linux",
-      "cases": [
-        {
-          "name": "cancellation removes running VM",
-          "passed": true
-        }
-      ],
-      "settings": {
-        "template": "docker.io/docker/sandbox-templates@sha256:b178ca62ec2e79af2a044e3ec321bdb72188690e1c15d573ea5524b397554d3d",
-        "imageId": "sha256:de170b39439eb0e5a3444ad7d60b015614a381e10fecae2e30ec9e735122f38d",
-        "imageArchiveSha256": "ed48a8c2b18f4155b135a18c3733dbe964b36ec85fd91c79e6173c8248c9f3df"
-      }
-    },
-    {
-      "startIndex": 12,
-      "at": "2026-10-24T05:08:51.472Z",
-      "platform": "linux",
-      "cases": [
-        {
-          "name": "output flood is bounded and cleaned",
-          "passed": true
-        },
-        {
-          "name": "runner deadline failure cleans VM",
-          "passed": true
-        }
-      ],
-      "settings": {
-        "template": "docker.io/docker/sandbox-templates@sha256:b178ca62ec2e79af2a044e3ec321bdb72188690e1c15d573ea5524b397554d3d",
-        "imageId": "sha256:de170b39439eb0e5a3444ad7d60b015614a381e10fecae2e30ec9e735122f38d",
-        "imageArchiveSha256": "ed48a8c2b18f4155b135a18c3733dbe964b36ec85fd91c79e6173c8248c9f3df"
-      }
-    }
-  ],
-  "postRunChanges": [
-    {
-      "path": "src/prompts.ts",
-      "before": "3d488be41cad33ba9a0f23f7d2091821d402bb42baa883da5bc1f69e470244eb",
-      "after": "738ae7a3d9bbc06dc0f64afce9a04ecfb290e457e2c5fd0d6a8ea5c73016a462",
-      "reason": "Clarified the prompt description of sandbox deadlines and resource caps after acceptance. No verification execution code changed."
-    }
-  ]
+  "historicalEvidence": {
+    "commit": "f3fb6342be51c39c1b290dea0794b0e2f5d80c90",
+    "path": "goal/verification/results/microvm-acceptance.json",
+    "note": "Prior source-v1 acceptance: 14/14, with historical development batches."
+  }
 }

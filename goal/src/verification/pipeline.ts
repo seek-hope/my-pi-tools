@@ -35,7 +35,6 @@ export async function prepareVerification(
   const environment: VerificationEnvironment = structuredClone(goal.verification);
   try {
     backend.validateEnvironment(environment);
-    await backend.doctor(signal);
   } catch (error) {
     throw error instanceof SandboxError ? error : new SandboxError(String(error));
   }
@@ -43,6 +42,9 @@ export async function prepareVerification(
   let snapshot: Snapshot | undefined;
   try {
     signal?.throwIfAborted();
+    // Reject unsupported inputs before daemon access or copying a potentially large image.
+    snapshot = await createSnapshot(cwd, settings, signal);
+    await backend.doctor(signal);
     // Freeze the archive too: changes to the configured path cannot swap the image after validation.
     await copyFile(settings.imageArchive, join(root, 'image.tar'));
     const image = join(root, 'image.tar');
@@ -52,7 +54,6 @@ export async function prepareVerification(
     for await (const chunk of createReadStream(image, { signal })) hash.update(chunk);
     if (hash.digest('hex') !== settings.imageArchiveSha256)
       throw new SandboxError('Check image archive digest mismatch');
-    snapshot = await createSnapshot(cwd, settings, signal);
     const frozen = snapshot;
     const identity: VerificationIdentity = {
       backend: 'docker-sandboxes',

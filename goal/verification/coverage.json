@@ -266,7 +266,7 @@
   },
   {
     "id": "docker-sandboxes",
-    "behavior": "Docker Sandboxes verification backend, frozen input manifests, private runner, cancellation cleanup and lease recovery",
+    "behavior": "Docker Sandboxes verification backend, source-v2 selection with project-bound fixture/hardlink exceptions, internal links, explicit non-secret variables, private runner, cancellation cleanup and lease recovery",
     "sources": ["src/verification/contract.ts", "src/verification/snapshot.ts", "src/verification/process.ts", "src/verification/leases.ts", "src/verification/docker-sandboxes.ts", "src/verification/pipeline.ts", "src/verification/runner.mjs", "src/verification/proxy.mjs", "src/verification/watchdog.ts", "src/verification/watchdog.mjs"],
     "models": [],
     "contracts": [],

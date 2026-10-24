@@ -130,7 +130,7 @@ node goal/scripts/check-sandbox.mjs --run /path/to/profile.json
 
 ## 限制
 
-- microVM 验收是**有界实测**（14/14 个用例），不是普遍隔离证明；未覆盖完整的 IPv6/UDP 攻击面、父进程强杀/daemon 崩溃矩阵和跨平台认证。
+- microVM 验收是**有界实测**（16/16 个用例），不是普遍隔离证明；未覆盖完整的 IPv6/UDP 攻击面、父进程强杀/daemon 崩溃矩阵和跨平台认证。
 - `goal` 尚未验证连续 5–12 小时的真实模型长跑，也不提供 daemon、自动模型切换或子代理编排。
 
 ## 文档
@@ -142,6 +142,7 @@ node goal/scripts/check-sandbox.mjs --run /path/to/profile.json
 | [goal/README.md](goal/README.md) | 目标生命周期、命令、验证环境、预算、持久化与恢复 |
 | [goal/docs/flow.md](goal/docs/flow.md) | 入口、状态机与验证流程（中文，含 Mermaid 图） |
 | [goal/docs/docker-sandboxes-setup.md](goal/docs/docker-sandboxes-setup.md) | microVM 后端配置与网络策略 |
+| [goal/docs/sandbox-boundary.md](goal/docs/sandbox-boundary.md) | 隔离范围、输入选择、安全链接、夹具授权与显式环境变量 |
 | [goal/docs/docker-sandboxes-acceptance.md](goal/docs/docker-sandboxes-acceptance.md) | 实测范围、结果与限制 |
 | [goal/verification/REPORT.md](goal/verification/REPORT.md) | 形式化验证方法与收据 |
 

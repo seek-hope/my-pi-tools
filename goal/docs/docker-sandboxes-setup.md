@@ -2,7 +2,7 @@
 
 Docker Sandboxes is the only backend for approved checks and independent audit reruns. It uses local microVMs through the standalone `sbx` CLI. Every check receives a fresh VM, a frozen source snapshot and a pinned check image; cleanup must succeed before completion. Missing prerequisites fail closed. The regular Pi process, its ordinary tools and other extensions remain on the host.
 
-See [acceptance results](docker-sandboxes-acceptance.md) for the tested platform and limits, and [per-goal environments](verification-environment.md) for network controls. The old bubblewrap executor and CI dependency have been removed.
+See [the boundary design and input policy](sandbox-boundary.md), [acceptance results](docker-sandboxes-acceptance.md) for the tested platform and limits, and [per-goal environments](verification-environment.md) for network controls. The old bubblewrap executor and CI dependency have been removed.
 
 ## Prerequisites
 
@@ -72,13 +72,14 @@ The trusted outer template may contain Docker's integration sockets and placehol
 
 ## Frozen inputs and evidence
 
-The fixed `source-v1` policy includes current dirty and untracked source bytes. It excludes `.git`, `.pi`, `.ssh`, `.aws`, `.gnupg`, `.kube`, `.docker`, `.codegraph`, `node_modules`, `target`, `.venv`, `__pycache__`, `.npmrc`, `.netrc`, `.pypirc`, `.env`, `.env.*` and `.pem/.key/.p12/.pfx` files. This is a known-path filter, not a general secret detector; it does not interpret `.gitignore`. Symlinks, hardlinks and special files are rejected.
+The versioned `source-v2` policy includes dirty/untracked source, applies default control/credential/dependency exclusions, and accepts personal `sandbox.inputs` selection rules. Exact sensitive-fixture and external-hardlink exceptions require a matching project path. Internal hardlinks become independent files; relative symlinks must resolve inside the selected tree. Cycles, outside/excluded targets and special files fail preparation. Use `/goal sandbox inputs` to inspect paths and reasons without creating a VM. See [selection rules, examples and limits](sandbox-boundary.md#source-selection).
 
-Inputs, executable bits, exclusions, approved checks and the environment receive digests. The auditor reads the same frozen copy and can rerun only frozen approved commands. Completion verifies the current selected source inputs and the session/owner/generation fence. A passing audit cannot override a failed rerun or a cleanup failure. Full persistent manifest/artifact export and custom input profiles remain future work.
+Inputs, executable bits, exclusions, approved checks and the environment receive digests. The auditor reads the same frozen copy and can rerun only frozen approved commands. Completion verifies the current selected source inputs and the session/owner/generation fence. A passing audit cannot override a failed rerun or a cleanup failure. Full persistent manifest/artifact export remains future work.
 
 ## Diagnostics and real acceptance
 
 ```text
+/goal sandbox inputs
 /goal sandbox doctor
 /goal sandbox status
 /goal sandbox cleanup
@@ -91,7 +92,7 @@ npm run check:sandbox -- --doctor /absolute/personal/my-pi-goal.json
 npm run check:sandbox -- --run /absolute/personal/my-pi-goal.json
 ```
 
-The real suite creates VMs and tests read-only/ephemeral behavior, host file/socket/credential absence, offline networking, HTTPS npm downloads, allow/deny policies, direct TCP/DNS bypass attempts, forged stdout, cancellation, bounded output and timeout cleanup. Missing prerequisites cause failure, never a passing skip. Results are written beside the supplied configuration as `acceptance-results.json`, including the CLI version and source hashes. Successful completion requires those hashes to remain unchanged throughout the run. An optional zero-based case index after the configuration resumes a suffix of the suite and writes `acceptance-results-from-<index>.json`; such a file proves only its listed cases. The manual [microVM workflow](../../.github/workflows/sandbox.yml) runs the entire suite on a dedicated self-hosted runner; set the repository variable `GOAL_SANDBOX_CONFIG` to its reviewed personal profile path.
+The real suite creates VMs and tests read-only/ephemeral behavior, host file/socket/credential absence, offline networking, HTTPS npm downloads, allow/deny policies, direct TCP/DNS bypass attempts, forged stdout, cancellation, bounded output, timeout cleanup, internal-link transfer and an offline npm dependency/build/test workflow with explicit variables and approved fixtures. Missing prerequisites cause failure, never a passing skip. Results are written beside the supplied configuration as `acceptance-results.json`, including the CLI version and source hashes. Successful completion requires those hashes to remain unchanged throughout the run. An optional zero-based case index after the configuration resumes a suffix of the suite and writes `acceptance-results-from-<index>.json`; such a file proves only its listed cases. The manual [microVM workflow](../../.github/workflows/sandbox.yml) runs the entire suite on a dedicated self-hosted runner; set the repository variable `GOAL_SANDBOX_CONFIG` to its reviewed personal profile path.
 
 Regular `npm test` injects fake transports for orchestration and host lifecycle tests, tests the local proxy against a controlled upstream, and runs a separate watchdog process against a fake CLI. These tests do not certify a microVM. The existing formal models cover abstract lifecycle and verification gates; the microVM/proxy implementation has no formal composition proof.
 

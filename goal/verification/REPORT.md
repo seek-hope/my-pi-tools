@@ -109,7 +109,7 @@ Each control must violate the named property with a trace; parse errors, crashes
 | settings-permissions | 2255 |
 | context | 288 |
 | layout | 261360 |
-| environment | 206 |
+| environment | 118 |
 | storage | 39 |
 | host-support | 9 |
 

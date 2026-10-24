@@ -590,7 +590,8 @@ group(
       check(summary.includes('host filesystem: not mounted'), 'host filesystem is never exposed');
     }
     check(
-      JSON.stringify(normalizeVerification(undefined)) === JSON.stringify(DEFAULT_VERIFICATION),
+      JSON.stringify(normalizeVerification(undefined)) ===
+        JSON.stringify({ ...DEFAULT_VERIFICATION, workspace: 'readonly' }),
       'missing configuration means read-only and isolated',
     );
     for (const value of [
@@ -606,6 +607,25 @@ group(
         !accepts(() => normalizeVerification(value)),
         'invalid environment configuration is rejected',
       );
+    const explicit = normalizeVerification({ variables: { TZ: 'UTC', CI: '1' } });
+    check(
+      makeGoal('Build').verification.workspace === 'ephemeral',
+      'new goals use disposable writable copies',
+    );
+    check(
+      verificationKey(explicit) ===
+        verificationKey({ ...explicit, variables: { CI: '1', TZ: 'UTC' } }),
+      'explicit variable identity ignores declaration order',
+    );
+    check(
+      verificationKey(explicit) !== verificationKey({ ...explicit, variables: { CI: '0' } }),
+      'explicit values are bound into verification identity',
+    );
+    for (const name of ['HTTP_PROXY', 'PATH', 'HOME', 'OPENAI_API_KEY', 'BASH_ENV'])
+      check(
+        !accepts(() => normalizeVerification({ variables: { [name]: 'unsafe' } })),
+        'reserved and credential variables are rejected',
+      );
     const networkPattern = 'Could not resolve host: example.com';
     check(
       Boolean(environmentSignature(networkPattern, DEFAULT_VERIFICATION, 6)),
@@ -617,7 +637,13 @@ group(
     );
     const readonlyPattern = 'cannot create output: Read-only file system';
     check(
-      Boolean(environmentSignature(readonlyPattern, DEFAULT_VERIFICATION, 1)),
+      Boolean(
+        environmentSignature(
+          readonlyPattern,
+          { ...DEFAULT_VERIFICATION, workspace: 'readonly' },
+          1,
+        ),
+      ),
       'ephemeral workspace is suggested for a read-only failure',
     );
     check(

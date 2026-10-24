@@ -1854,6 +1854,11 @@ test('environment-classified failures never consume implementation repairs and s
     },
   });
   await startWithChecks(h);
+  await h.tool('goal_environment', {
+    goal_id: h.goal().id,
+    generation: h.goal().generation,
+    workspace: 'readonly',
+  });
   const first = await h.tool('goal_submit', {
     goal_id: h.goal().id,
     generation: h.goal().generation,
@@ -1952,11 +1957,11 @@ test('host verification network requires policy approval and probe failures neve
   const applied = await failing.tool('goal_environment', {
     goal_id: failing.goal().id,
     generation: failing.goal().generation,
-    workspace: 'ephemeral',
+    workspace: 'readonly',
   });
   assert.match(applied.content[0].text, /not applied: sandbox profile unavailable/);
   assert.deepEqual(failing.goal().verification, {
-    workspace: 'readonly',
+    workspace: 'ephemeral',
     network: 'isolated',
     env: [],
   });
@@ -2111,6 +2116,47 @@ test('network approval is bound to destinations; an old grant cannot authorize b
   await h.tool('goal_environment', { ...key, network: 'open' });
   assert.equal(asks, 3);
   assert.equal(h.goal().verification.network, 'allowlist');
+});
+
+test('input inspection is read-only, needs no sandbox profile and never creates a goal', async (t) => {
+  const h = await harness(t);
+  delete h.rt.settings.sandbox;
+  await h.cmd('sandbox inputs');
+  assert.equal(h.rt.state.goals.length, 0);
+  assert.ok(h.messages.some((message) => JSON.stringify(message).includes('source-v2')));
+  await start(h);
+  await h.cmd('pause');
+  h.rt.store.release();
+  const beforeState = structuredClone(h.rt.state);
+  const before = structuredClone(h.goal());
+  const key = { goal_id: before.id, generation: before.generation };
+  const report = await h.tool('goal_environment', { ...key, inspect_inputs: true });
+  assert.equal(report.details.ready, true);
+  assert.deepEqual(h.goal(), before);
+  assert.deepEqual(h.rt.state, beforeState);
+  await assert.rejects(
+    h.tool('goal_environment', { ...key, inspect_inputs: true, network: 'open' }),
+    /cannot be combined/,
+  );
+  await assert.rejects(h.tool('goal_environment', { ...key, input_offset: 0 }), /requires/);
+});
+
+test('explicit environment values persist without host inheritance or scope modification', async (t) => {
+  const h = await harness(t, { probe: async () => ({ ok: true }) });
+  await start(h);
+  const key = { goal_id: h.goal().id, generation: h.goal().generation };
+  const scope = structuredClone(h.goal().checks);
+  await h.tool('goal_environment', { ...key, variables: { CI: '1', TZ: 'UTC' } });
+  assert.deepEqual(h.goal().verification.variables, { CI: '1', TZ: 'UTC' });
+  assert.deepEqual(h.goal().checks, scope);
+  assert.equal(h.goal().generation, key.generation);
+  await assert.rejects(
+    h.tool('goal_environment', { ...key, variables: { HTTP_PROXY: 'http://outside' } }),
+    /reserved/,
+  );
+  assert.deepEqual(h.goal().verification.variables, { CI: '1', TZ: 'UTC' });
+  await h.tool('goal_environment', { ...key, variables: {} });
+  assert.equal(h.goal().verification.variables, undefined);
 });
 
 test('Docker preflight failure prevents checks and auditing', async (t) => {

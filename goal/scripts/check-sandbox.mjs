@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, writeFile, rm, symlink, link, access } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { sandboxSettings } from '../src/verification/contract.ts';
@@ -27,6 +27,55 @@ if (mode === '--run') {
     await writeFile(join(cwd, 'input.txt'), 'frozen');
     const outside = join(root, 'host-secret.txt');
     await writeFile(outside, 'must not cross the VM boundary');
+    await link(join(cwd, 'input.txt'), join(cwd, 'input-hardlink.txt'));
+    await symlink('input.txt', join(cwd, 'input-link.txt'));
+    await mkdir(join(cwd, 'vendor', 'fixture-math'), { recursive: true });
+    await symlink('vendor', join(cwd, 'linked-vendor'));
+    await writeFile(
+      join(cwd, 'vendor', 'fixture-math', 'package.json'),
+      JSON.stringify({ name: 'fixture-math', version: '1.0.0', main: 'index.js' }),
+    );
+    await writeFile(
+      join(cwd, 'vendor', 'fixture-math', 'index.js'),
+      'module.exports = x => x + 1;\n',
+    );
+    await writeFile(
+      join(cwd, 'package.json'),
+      JSON.stringify({
+        name: 'goal-build-fixture',
+        version: '1.0.0',
+        dependencies: { 'fixture-math': 'file:vendor/fixture-math' },
+        scripts: { build: 'node build.cjs', test: 'node --test test.cjs' },
+      }),
+    );
+    await writeFile(
+      join(cwd, 'package-lock.json'),
+      JSON.stringify({
+        name: 'goal-build-fixture',
+        version: '1.0.0',
+        lockfileVersion: 3,
+        requires: true,
+        packages: {
+          '': {
+            name: 'goal-build-fixture',
+            version: '1.0.0',
+            dependencies: { 'fixture-math': 'file:vendor/fixture-math' },
+          },
+          'node_modules/fixture-math': { resolved: 'vendor/fixture-math', link: true },
+          'vendor/fixture-math': { name: 'fixture-math', version: '1.0.0' },
+        },
+      }),
+    );
+    await writeFile(join(cwd, '.env.example'), 'synthetic fixture, not credentials');
+    await writeFile(join(cwd, 'fixture.pem'), 'synthetic certificate fixture');
+    await writeFile(
+      join(cwd, 'build.cjs'),
+      'const fs=require("fs");fs.mkdirSync("dist");fs.writeFileSync("dist/result.txt",String(require("fixture-math")(41)));\n',
+    );
+    await writeFile(
+      join(cwd, 'test.cjs'),
+      `const {test}=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs');test('offline build has expected inputs and explicit environment',()=>{assert.equal(fs.readFileSync('dist/result.txt','utf8'),'42');assert.equal(fs.readFileSync('input-link.txt','utf8'),'frozen');assert.equal(fs.readFileSync('.env.example','utf8'),'synthetic fixture, not credentials');assert.equal(fs.readFileSync('fixture.pem','utf8'),'synthetic certificate fixture');assert.equal(process.env.CI,'1');assert.equal(process.env.TZ,'UTC');assert.equal(require('./linked-vendor/fixture-math')(1),2);});\n`,
+    );
     const quote = (value) => `'${value.replaceAll("'", "'\\''")}'`;
     const node = (code) => `node -e ${quote(code)}`;
     const request = (host, status) =>
@@ -101,6 +150,20 @@ if (mode === '--run') {
         timeout: 2000,
         error: /deadline/i,
       },
+      {
+        name: 'selected relative links and independent hardlink copies survive VM transfer',
+        command: node(
+          "const fs=require('fs'),a=require('assert/strict');a.equal(fs.lstatSync('input-link.txt').isSymbolicLink(),true);a.equal(fs.readFileSync('input-link.txt','utf8'),'frozen');a.equal(fs.statSync('input-hardlink.txt').nlink,1);a.notEqual(fs.statSync('input-hardlink.txt').ino,fs.statSync('input.txt').ino);a.equal(require('./linked-vendor/fixture-math')(1),2);",
+        ),
+      },
+      {
+        name: 'offline npm install build and test with explicit values and approved fixtures',
+        workspace: 'ephemeral',
+        variables: { CI: '1', TZ: 'UTC' },
+        inputs: { project: cwd, allowFiles: ['.env.example', 'fixture.pem'] },
+        command:
+          'npm ci --offline --ignore-scripts --no-audit --no-fund && npm run build && npm test',
+      },
     ];
     const startIndex = Number(startText);
     if (!Number.isSafeInteger(startIndex) || startIndex < 0 || startIndex >= cases.length)
@@ -140,12 +203,17 @@ if (mode === '--run') {
           allow: entry.allow ?? [],
           deny: entry.deny ?? [],
           env: [],
+          ...(entry.variables ? { variables: entry.variables } : {}),
         },
       };
       const context = await prepareVerification(
         cwd,
         goal,
-        { ...settings, ...(entry.timeout ? { checkTimeoutMs: entry.timeout } : {}) },
+        {
+          ...settings,
+          ...(entry.timeout ? { checkTimeoutMs: entry.timeout } : {}),
+          ...(entry.inputs ? { inputs: entry.inputs } : {}),
+        },
         leaseRoot,
       );
       const abort = new AbortController();
@@ -203,8 +271,10 @@ if (mode === '--run') {
         });
       }
       assert.equal(await readFile(join(cwd, 'input.txt'), 'utf8'), 'frozen');
+      await assert.rejects(access(join(cwd, 'node_modules')));
+      await assert.rejects(access(join(cwd, 'dist')));
       assert.equal((await backend.leases.list()).length, 0, 'No sandbox leases may remain');
-      receipt.cases.push({ name: entry.name, passed: true });
+      receipt.cases.push({ name: entry.name, passed: true, verification: context.identity });
       await saveReceipt();
       console.log(`PASS: ${entry.name}`);
     }

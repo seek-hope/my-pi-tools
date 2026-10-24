@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile, writeFile, access } from 'node:fs/promises';
+import { readFile, writeFile, access, symlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { hostname } from 'node:os';
 import { randomUUID } from 'node:crypto';
@@ -255,6 +255,59 @@ test('preflight rejects obsolete network modes, host variables and unknown CLI v
       false,
     );
   }
+});
+
+test('explicit variable values reach each fresh check and cannot change after preparation', async (t) => {
+  const { cwd, root, settings } = await fixture(t);
+  const observed = [];
+  const fake = fakeSbx({
+    execute: async ({ request, success }) => {
+      observed.push(request.variables);
+      return success({
+        version: 1,
+        runId: request.runId,
+        kind: 'check',
+        exitCode: 0,
+        output: 'ok',
+        truncated: false,
+      });
+    },
+  });
+  const g = goal();
+  g.verification.variables = { CI: '1', TZ: 'UTC' };
+  const backend = new DockerSandboxes(settings, join(root, 'leases'), fake.run);
+  const context = await prepareVerification(
+    cwd,
+    g,
+    settings,
+    backend.leases.root,
+    undefined,
+    backend,
+  );
+  try {
+    g.verification.variables.CI = 'changed';
+    await context.check(g.checks[0]);
+    await context.check(g.checks[0]);
+    assert.deepEqual(observed, [
+      { CI: '1', TZ: 'UTC' },
+      { CI: '1', TZ: 'UTC' },
+    ]);
+  } finally {
+    await context.finish(false);
+  }
+});
+
+test('invalid snapshot input fails before daemon access or image preparation', async (t) => {
+  const { cwd, root, settings } = await fixture(t);
+  await symlink('/outside', join(cwd, 'escape'));
+  settings.imageArchive = '/absent/image.tar';
+  const fake = fakeSbx();
+  const backend = new DockerSandboxes(settings, join(root, 'leases'), fake.run);
+  await assert.rejects(
+    prepareVerification(cwd, goal(), settings, backend.leases.root, undefined, backend),
+    /Snapshot rejects/,
+  );
+  assert.equal(fake.calls.length, 0);
 });
 
 test('image archive changes are rejected before creating a VM', async (t) => {

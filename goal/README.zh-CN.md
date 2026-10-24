@@ -147,9 +147,9 @@ ID 支持唯一前缀。队首为未确认草稿时不会自动越过。旧 `sta
 
 验收器只获得 `audit_read`、`audit_search`、`audit_list`、`audit_record`、`audit_check` 和提交结果的工具，没有通用 bash、写入工具或其他扩展。`audit_record` 读取本轮冻结的执行器证据或检查输出，不算独立产物检查。读取和搜索路径经过真实路径校验，禁止目录穿越和项目外符号链接。单文件文本大小上限 5 MB；二进制结果须由执行器提供可审查的文本/统计导出。
 
-**检查需要 Docker Sandboxes 与固定 digest 的模板及检查镜像。** 真实项目、home 和宿主 socket 不挂载进 VM；检查在 VM 内的受限非 root 容器中运行。默认只读，可选择临时可写副本，所有写入均丢弃；启动或清理失败时停止验证。
+**检查需要 Docker Sandboxes 与固定 digest 的模板及检查镜像。** 真实项目、home 和宿主 socket 不挂载进 VM；检查在 VM 内的受限非 root 容器中运行。新目标默认使用临时可写副本，也可显式选择只读；所有写入均丢弃，启动或清理失败时停止验证。
 
-使用 `goal_environment` 可选择 `readonly` / `ephemeral` 工作区，以及 `isolated`（离线）、`allowlist`（指定域名/端口）或 `open`（开放出站）网络模式；`deny` 拒绝列表优先。联网须经过 HTTP/HTTPS 代理，不能直连外网或访问宿主本地服务。目前要求 `env: []`。环境调整不改变批准的规格；显式网络确认策略仍生效，授权绑定具体目标列表。旧 `host` 模式迁移为离线，需要重新选择联网权限。
+使用 `goal_environment` 可选择 `readonly` / `ephemeral` 工作区，以及 `isolated`（离线）、`allowlist`（指定域名/端口）或 `open`（开放出站）网络模式；`deny` 拒绝列表优先。联网须经过 HTTP/HTTPS 代理，不能直连外网或访问宿主本地服务。新目标默认使用 `ephemeral`，已有目标保留原设置。`env: []` 表示不继承宿主环境；`variables` 可显式设置 `CI`、`TZ` 等非秘密值。使用 `/goal sandbox inputs` 可预览输入、排除项与拒绝原因；安全链接和绑定项目的夹具例外见 [边界设计](docs/sandbox-boundary.md)。环境调整不改变批准的规格；显式网络确认策略仍生效，授权绑定具体目标列表。旧 `host` 模式迁移为离线，需要重新选择联网权限。
 
 ### 存储与上下文效率
 

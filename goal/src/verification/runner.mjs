@@ -31,6 +31,22 @@ if (
 )
   throw new Error('Invalid goal runner request');
 
+const variables = request.variables ?? {};
+if (
+  !variables ||
+  typeof variables !== 'object' ||
+  Array.isArray(variables) ||
+  Object.keys(variables).length > 32 ||
+  Object.entries(variables).some(
+    ([name, value]) =>
+      !/^[A-Za-z_][A-Za-z0-9_]*$/.test(name) ||
+      typeof value !== 'string' ||
+      value.includes('\u0000') ||
+      Buffer.byteLength(value) > 4096,
+  )
+)
+  throw new Error('Invalid goal runner environment');
+
 const base = `/tmp/${request.runId}`;
 const volume = `goal-${randomUUID()}`;
 const job = `goal-${randomUUID()}`;
@@ -136,8 +152,8 @@ try {
   if (seeded[0]?.State?.ExitCode !== 0) throw new Error('Cannot initialize check workspace');
   await ok(['rm', seed]);
   createdSeed = false;
-  // Host snapshot files were sealed. Make the private volume writable only in ephemeral mode.
-  // A trusted chmod pass cannot follow symlinks: SnapshotBuilder rejects all links.
+  // Host snapshot files were sealed. Links were canonicalized to selected internal targets;
+  // GNU chmod -R does not traverse symlinked directories encountered during recursion.
   if (request.workspace === 'ephemeral') {
     await ok([
       'create',
@@ -261,6 +277,7 @@ try {
     'HOME=/tmp',
     'TMPDIR=/tmp',
     'LANG=C.UTF-8',
+    ...Object.entries(request.variables ?? {}).map(([name, value]) => `${name}=${value}`),
     ...proxyEnvironment,
     '/bin/bash',
     '--noprofile',

@@ -1,8 +1,8 @@
 # Docker Sandboxes microVM acceptance
 
-**Result: 14/14 cases passed in one continuous run on 2026-10-24 (05:46–05:56 UTC).** These were real local microVM executions through `sbx`, with a pinned shell template and archived check image. The run used **client and daemon 0.49.2**, confirmed against daemon request logs. An earlier four-case offline smoke also passed on 0.48.0.
+**Result: 16/16 cases passed in one continuous run on 2026-10-24 (07:59–08:11 UTC).** These were real local microVM executions through `sbx`, with a pinned shell template and archived check image. The run used **client and daemon 0.49.2**, confirmed against daemon request logs. An earlier four-case offline smoke also passed on 0.48.0.
 
-The [machine-readable receipt](../verification/results/microvm-acceptance.json) contains the complete run, image identities, CLI version and 147 source hashes captured at startup and checked again at completion. Earlier development batches are retained separately as historical evidence; the continuous run supersedes them.
+The [machine-readable receipt](../verification/results/microvm-acceptance.json) contains the complete run, image identities, per-case verification identities, CLI version and 147 source hashes captured at startup and checked again at completion. All listed hashes still match the current sources. The prior source-v1 run and development batches remain in Git history at the commit referenced by the receipt.
 
 ## Environment
 
@@ -37,8 +37,10 @@ The inner image was pulled and archived in an owned preparation VM, then copied 
 | 12 | Cancellation after observing a running check removes the VM | Pass |
 | 13 | Continuous output with backpressure triggers the output limit and VM cleanup | Pass |
 | 14 | The runner deadline rejects the operation and cleans the VM | Pass |
+| 15 | Internal relative file/directory links survive transfer; hardlink copies have distinct inodes and one name each | Pass |
+| 16 | Offline npm install of a local dependency, build and node:test workflow with explicit CI/TZ and project-bound fixture exceptions | Pass |
 
-Each case also checked that the host input remained unchanged and no owned resource lease remained. All cases ran against the same listed source hashes and personal profile. Afterward, only the model prompt's description of sandbox deadlines/resource limits changed among the hashed files; the receipt records its before/after hashes. Verification execution code is unchanged.
+Each case also checked that the host input remained unchanged, no host `node_modules` or `dist` directory appeared, and no owned resource lease remained. All cases ran against the same listed source hashes and pinned personal images. Case 16 uses temporary, exact fixture exceptions bound to the generated test project; each case's frozen identity is recorded. No hashed source changed after acceptance.
 
 ## Findings resolved during acceptance
 
@@ -46,6 +48,8 @@ Each case also checked that the host input remained unchanged and no owned resou
 2. **Locked desktop keyring:** a locked Secret Service blocked Docker credential access and CLI operations. The interrupted attempt retained `cleanup_pending`. After the keyring unlocked, exact-ID recovery removed the stopped VM and its lease. No global policy reset or blanket prune was used.
 3. **Unstable output-pressure fixture:** an unbounded JavaScript output buffer did not consistently reach the expected supervisor output-limit error. The final fixture honors write backpressure, then continuously produces output. It passed with the final personal profile.
 4. **Review fixes:** the proxy canonicalizes trailing DNS root dots before applying deny rules and uses exact special-use IPv4 ranges. The pipeline preserves environment-failure classification during audit reruns. Local regressions cover these cases, and the complete microVM run includes the trailing-dot denial. The suite also refuses to swallow cleanup failures in expected negative cases.
+5. **Source-v2 boundary:** selected internal hardlinks become independent copies, relative symlinks resolve only within selected inputs, and exact content exceptions are project-bound. Unit tests cover outside/excluded/dangling/cyclic links, missing aliases, private paths, selection and preview behavior. New real cases verify that safe links survive the entire transfer path and that a conventional npm workflow can run without host writeback. See the [boundary design](sandbox-boundary.md).
+6. **Review of path and graph limits:** relative-path containment now rejects a temporary snapshot beneath a filesystem-root workspace before enumeration. Directory-link cycle detection uses an explicit stack, so a valid chain across 5,000 shallow directories no longer throws a JavaScript stack overflow. Both cases failed before the fix and pass as regressions; existing cycle-rejection tests still pass.
 
 The client/daemon were initially 0.48.0 and later changed to 0.49.2 in the shared environment. The complete numbered batches started after that change. This implementation did not upgrade or restart the shared daemon, alter global integration settings, or change host Docker group membership.
 
@@ -58,9 +62,9 @@ npm run check:sandbox -- --doctor /absolute/personal/my-pi-goal.json
 npm run check:sandbox -- --run /absolute/personal/my-pi-goal.json
 ```
 
-A trailing zero-based case index runs only a suffix and writes a separate receipt. For example, `... --run /absolute/personal/my-pi-goal.json 12` runs cases 13–14. Missing prerequisites and failed assertions exit nonzero; there is no successful skip. The separate [manual CI workflow](../../.github/workflows/sandbox.yml) runs the complete suite on a dedicated authenticated runner and has not been run on GitHub in this session.
+A trailing zero-based case index runs only a suffix and writes a separate receipt. For example, `... --run /absolute/personal/my-pi-goal.json 12` runs cases 13–16. Missing prerequisites and failed assertions exit nonzero; there is no successful skip. The separate [manual CI workflow](../../.github/workflows/sandbox.yml) runs the complete suite on a dedicated authenticated runner and has not been run on GitHub in this session.
 
-The ordinary goal suite passed **152/152**, with no platform skips. Pi **1.3.0 and 1.4.0** passed types, the full suite and isolated extension loading. Existing formal verification passed **76 configurations**, with current-source receipt checks. Those models cover abstract lifecycle and verification gates; the microVM/proxy implementation remains explicitly outside the formal composition proof.
+The ordinary goal suite passed **168/168**, with no platform skips. Pi **1.3.0 and 1.4.0** passed types, the full suite and isolated extension loading. Existing formal verification passed **76 configurations**, with current-source receipt checks. Those models cover abstract lifecycle and verification gates; the microVM/proxy implementation remains explicitly outside the formal composition proof.
 
 ## Scope limits
 

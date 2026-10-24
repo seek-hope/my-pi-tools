@@ -9,7 +9,7 @@ import { disposeSandbox, LeaseStore, ownerAlive, parseSandboxList, type Lease } 
 import type { Snapshot } from './snapshot.ts';
 import type { Check, CheckResult } from '../state.ts';
 import type { VerificationEnvironment } from '../checks.ts';
-import { environmentSignature } from '../checks.ts';
+import { environmentSignature, normalizeVerification, verificationVariables } from '../checks.ts';
 import { startWatchdog } from './watchdog.ts';
 
 export const SBX_VERSIONS = ['0.48.0', '0.49.2'];
@@ -52,6 +52,7 @@ export class DockerSandboxes {
   validateEnvironment(environment: VerificationEnvironment) {
     if (!['isolated', 'allowlist', 'open'].includes(environment.network))
       throw new SandboxError('Unsupported verification network policy');
+    normalizeVerification(environment);
     if (environment.env.length)
       throw new SandboxError(
         'Docker Sandboxes v1 does not pass host variables. Bake toolchains and non-secret defaults into the pinned check image.',
@@ -110,6 +111,7 @@ export class DockerSandboxes {
         network: environment.network,
         allow: environment.allow ?? [],
         deny: environment.deny ?? [],
+        variables: verificationVariables(environment.variables),
         timeoutMs: this.settings.checkTimeoutMs,
         outputBytes: this.settings.outputBytes,
         memoryMiB: this.settings.memoryMiB,

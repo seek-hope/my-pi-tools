@@ -56,6 +56,7 @@ import { confirmPendingScope, formatPendingScope } from './approval.ts';
 import { join } from 'node:path';
 import { prepareVerification, type VerificationContext } from './verification/pipeline.ts';
 import { SandboxError } from './verification/contract.ts';
+import { inspectInputs, inputPage } from './verification/snapshot.ts';
 import { DockerSandboxes } from './verification/docker-sandboxes.ts';
 
 type Context = ExtensionContext;
@@ -1055,7 +1056,7 @@ export class GoalRuntime {
       name: 'goal_environment',
       label: 'Verification environment',
       description:
-        'Configure Docker Sandboxes verification. workspace "ephemeral" permits disposable writes. network "isolated" blocks egress; "allowlist" permits allow destinations; "open" permits public destinations except deny. Destinations are DNS names, optional *. subdomains and :port. Online checks must use HTTP_PROXY/HTTPS_PROXY; direct TCP/UDP and host services remain unavailable. Network changes follow the goal permission policy. env must currently be empty. Settings are frozen for each submission and audit.',
+        'Configure Docker Sandboxes verification. workspace "ephemeral" permits disposable writes. network "isolated" blocks egress; "allowlist" permits allow destinations; "open" permits public destinations except deny. Destinations are DNS names, optional *. subdomains and :port. Online checks must use HTTP_PROXY/HTTPS_PROXY; direct TCP/UDP and host services remain unavailable. Network changes follow the goal permission policy. env must be empty (no host inheritance). variables sets explicit non-secret strings saved in goal history; proxy, execution-control and credential names are reserved. Set inspect_inputs=true to preview selected/excluded/rejected paths without changing the environment or creating a VM; input_offset pages the inventory. Settings are frozen for each submission and audit.',
       executionMode: 'sequential',
       parameters: Type.Object({
         ...identity.properties,
@@ -1066,11 +1067,38 @@ export class GoalRuntime {
         env: Type.Optional(
           Type.Array(Type.String({ pattern: '^[A-Za-z_][A-Za-z0-9_]*$' }), { maxItems: 32 }),
         ),
+        variables: Type.Optional(
+          Type.Record(Type.String(), Type.String({ maxLength: 4096 }), { maxProperties: 32 }),
+        ),
+        inspect_inputs: Type.Optional(Type.Boolean()),
+        input_offset: Type.Optional(Type.Integer({ minimum: 0 })),
         reason: Type.Optional(bounded(2000)),
       }),
       execute: async (_id, p, signal, _update, ctx) => {
         const missing = this.missingGoalResult(p.goal_id);
         if (missing) return missing;
+        if (p.inspect_inputs) {
+          const candidate = this.state.goals.find((goal) => goal.id === p.goal_id);
+          if (candidate?.generation !== p.generation)
+            throw new Error('Goal version changed; read goal_status again');
+          if (
+            [p.workspace, p.network, p.allow, p.deny, p.env, p.variables].some(
+              (value) => value !== undefined,
+            )
+          )
+            throw new Error('Input inspection cannot be combined with environment changes');
+          const report = inputPage(
+            await inspectInputs(
+              ctx.cwd,
+              this.settings.sandbox ?? { snapshotBytes: 256 * 1024 * 1024, snapshotFiles: 20000 },
+              signal,
+            ),
+            p.input_offset,
+          );
+          return textResult(JSON.stringify(report, null, 2), report);
+        }
+        if (p.input_offset !== undefined)
+          throw new Error('input_offset requires inspect_inputs=true');
         let g = this.require(p.goal_id, p.generation, ['draft', 'active']);
         const next = normalizeVerification({
           ...g.verification,
@@ -1079,6 +1107,7 @@ export class GoalRuntime {
           ...(p.allow ? { allow: p.allow } : {}),
           ...(p.deny ? { deny: p.deny } : {}),
           ...(p.env ? { env: p.env } : {}),
+          ...(p.variables ? { variables: p.variables } : {}),
         });
         if (verificationKey(next) === verificationKey(g.verification))
           return textResult(
@@ -1509,6 +1538,16 @@ export class GoalRuntime {
     if (!cmd) cmd = 'status';
     const tail = rest.join(' ');
     if (cmd === 'sandbox') {
+      if (rest[0] === 'inputs') {
+        if (rest.length > 2 || (rest[1] !== undefined && !/^\d+$/.test(rest[1])))
+          throw new Error('Usage: /goal sandbox inputs [offset]');
+        const report = await inspectInputs(
+          ctx.cwd,
+          this.settings.sandbox ?? { snapshotBytes: 256 * 1024 * 1024, snapshotFiles: 20000 },
+        );
+        this.notify(ctx, JSON.stringify(inputPage(report, Number(rest[1] ?? 0)), null, 2));
+        return;
+      }
       if (!this.settings.sandbox) {
         this.notify(
           ctx,
@@ -1544,7 +1583,7 @@ export class GoalRuntime {
             2,
           ),
         );
-      } else throw new Error('Usage: /goal sandbox doctor|status|cleanup');
+      } else throw new Error('Usage: /goal sandbox doctor|status|cleanup|inputs [offset]');
       return;
     }
     if (cmd === 'help') {
@@ -1875,7 +1914,7 @@ const HELP = `/goal                       Show session goals and queue
 
 Send requirements or changes as normal messages. Ownership is automatic.
 /goal help more             Panel, skipping goals and optional settings`;
-const MORE_HELP = `Verification: /goal sandbox doctor|status|cleanup
+const MORE_HELP = `Verification: /goal sandbox inputs [offset] | doctor | status | cleanup
 Display: /goal panel [show|hide|compact|expand] (no argument toggles visibility)
 Skip: /goal skip [id] (history retained; resume to continue the queue)
 Select: /goal approve [id] or /goal resume [id]

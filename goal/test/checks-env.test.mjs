@@ -8,8 +8,15 @@ import {
   verificationSummary,
 } from '../src/checks.ts';
 
+import { makeGoal } from '../src/state.ts';
+
 test('network policies normalize destinations and migrate old host grants to offline', () => {
-  assert.deepEqual(normalizeVerification(undefined), DEFAULT_VERIFICATION);
+  assert.deepEqual(normalizeVerification(undefined), {
+    ...DEFAULT_VERIFICATION,
+    workspace: 'readonly',
+  });
+  assert.equal(makeGoal('Build the project').verification.workspace, 'ephemeral');
+  assert.equal(normalizeVerification({ workspace: 'readonly' }).workspace, 'readonly');
   assert.equal(normalizeVerification({ network: 'host' }).network, 'isolated');
   const policy = normalizeVerification({
     network: 'allowlist',
@@ -45,9 +52,52 @@ test('verification identities bind the entire network policy without depending o
   assert.match(verificationSummary(a), /allowlist via HTTP\/HTTPS proxy/);
   assert.match(verificationSummary(a), /host filesystem: not mounted/);
 });
+test('explicit variables are canonical, identity-bound and cannot inherit credentials or change proxy controls', () => {
+  const first = normalizeVerification({ variables: { TZ: 'UTC', CI: '1' } });
+  const second = normalizeVerification({ variables: { CI: '1', TZ: 'UTC' } });
+  assert.equal(verificationKey(first), verificationKey(second));
+  assert.notEqual(verificationKey(first), verificationKey({ ...first, variables: { CI: '0' } }));
+  assert.match(verificationSummary(first), /CI, TZ/);
+  for (const name of [
+    'HTTP_PROXY',
+    'http_proxy',
+    'HTTPS_PROXY',
+    'no_proxy',
+    'PATH',
+    'HOME',
+    'NODE_EXTRA_CA_CERTS',
+    'NPM_CONFIG_CAFILE',
+    'API_KEY',
+    'AWS_ACCESS_KEY_ID',
+    'OPENAI_API_KEY',
+    'MY_TOKEN',
+    'LD_PRELOAD',
+    'BASH_ENV',
+  ])
+    assert.throws(
+      () => normalizeVerification({ variables: { [name]: 'not allowed' } }),
+      /reserved|credential/,
+    );
+  for (const variables of [
+    [],
+    { CI: 1 },
+    { CI: 'a\u0000b' },
+    { CI: 'a'.repeat(4097) },
+    Object.fromEntries(Array.from({ length: 33 }, (_, i) => [`FLAG_${i}`, '1'])),
+  ])
+    assert.throws(() => normalizeVerification({ variables }));
+});
+
 test('environment failure advice cannot turn failed checks into passes', () => {
   assert.match(environmentSignature('Proxy denied', DEFAULT_VERIFICATION, 1), /allowlist/);
-  assert.match(environmentSignature('Read-only file system', DEFAULT_VERIFICATION, 1), /ephemeral/);
+  assert.match(
+    environmentSignature(
+      'Read-only file system',
+      { ...DEFAULT_VERIFICATION, workspace: 'readonly' },
+      1,
+    ),
+    /ephemeral/,
+  );
   assert.equal(
     environmentSignature(
       'Read-only file system',
