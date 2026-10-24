@@ -317,7 +317,7 @@
     "expect": "pass"
   },
   {
-    "name": "check-sandbox",
+    "name": "check-metadata",
     "module": "CheckProtocol",
     "expect": "invariant",
     "property": "CheckBeforeAudit"
@@ -346,28 +346,28 @@
     "expect": "pass"
   },
   {
-    "name": "verification-snapshot",
+    "name": "verification-stale",
     "module": "VerificationProtocol",
     "expect": "invariant",
-    "property": "SnapshotUsed"
+    "property": "CurrentVersion"
   },
   {
     "name": "verification-repair",
     "module": "VerificationProtocol",
     "expect": "invariant",
-    "property": "EnvironmentIsNotRepair"
+    "property": "RequestIsNotRepair"
   },
   {
-    "name": "verification-pause",
+    "name": "verification-reply",
     "module": "VerificationProtocol",
     "expect": "invariant",
-    "property": "EnvironmentStops"
+    "property": "FreshReviewAfterReply"
   },
   {
     "name": "verification-completion",
     "module": "VerificationProtocol",
     "expect": "invariant",
-    "property": "NoEnvironmentCompletion"
+    "property": "NoUnansweredCompletion"
   },
   {
     "name": "scheduling",

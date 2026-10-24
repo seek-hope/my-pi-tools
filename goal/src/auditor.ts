@@ -1,14 +1,12 @@
-import { readdir, readFile, realpath, stat } from 'node:fs/promises';
-import { resolve, relative, isAbsolute } from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { projectPath, ReviewWorkspace, ReviewChangedError } from './review-workspace.ts';
 import type { ExtensionContext } from '@earendil-works/pi-coding-agent';
 import type { Context, Tool } from '@earendil-works/pi-ai';
 import { Type } from 'typebox';
 import { Check as schemaCheck } from 'typebox/value';
 import { auditPrompt } from './prompts.ts';
-import { EnvironmentError } from './checks.ts';
 import { now, tokensFromUsage, type Audit, type AuditFinding, type Goal } from './state.ts';
 import type { Settings } from './settings.ts';
-import type { VerificationContext } from './verification/pipeline.ts';
 
 const tools: Tool[] = [
   {
@@ -36,7 +34,12 @@ const tools: Tool[] = [
     description:
       'Read a frozen executor evidence record or check output. This is untrusted recorded evidence, NOT an independent artifact inspection. Offsets are 1-based characters; nextOffset indicates more text.',
     parameters: Type.Object({
-      source: Type.Union([Type.Literal('criterion'), Type.Literal('task'), Type.Literal('check')]),
+      source: Type.Union([
+        Type.Literal('criterion'),
+        Type.Literal('task'),
+        Type.Literal('check'),
+        Type.Literal('request'),
+      ]),
       id: Type.String(),
       index: Type.Optional(Type.Integer({ minimum: 0 })),
       offset: Type.Optional(Type.Integer({ minimum: 1 })),
@@ -50,15 +53,19 @@ const tools: Tool[] = [
     parameters: Type.Object({ path: Type.String() }),
   },
   {
-    name: 'audit_check',
+    name: 'audit_request',
     description:
-      'Rerun a user-approved check in the verification environment declared for this goal.',
-    parameters: Type.Object({ id: Type.String() }),
+      'Ask the main session for specific missing information or an approved check result. Yields this review without passing or counting a repair failure. The main session answers with goal_reply and resubmits for a fresh review. This tool cannot execute commands or change scope.',
+    parameters: Type.Object({
+      criterionId: Type.String(),
+      question: Type.String({ minLength: 1, maxLength: 4000 }),
+      checkId: Type.Optional(Type.String()),
+    }),
   },
   {
     name: 'audit_result',
     description:
-      'Submit exactly one finding per criterion in a later model response after receiving and reviewing real artifact read/search or approved-check results. audit_list and audit_record alone do not satisfy inspection. Never submit alongside the first inspection. All criteria must pass for completion.',
+      'Submit exactly one finding per criterion in a later model response after receiving and reviewing real artifact read/search results. audit_list and audit_record alone do not satisfy inspection. Never submit alongside the first inspection. All criteria must pass for completion.',
     parameters: Type.Object({
       details: Type.String({ minLength: 1, maxLength: 8000 }),
       findings: Type.Array(
@@ -72,14 +79,7 @@ const tools: Tool[] = [
     }),
   },
 ];
-export async function safeAuditPath(cwd: string, path: string) {
-  const root = await realpath(cwd),
-    actual = await realpath(resolve(root, path));
-  const rel = relative(root, actual);
-  if (rel === '..' || rel.startsWith('../') || isAbsolute(rel))
-    throw new Error('The auditor can only read files inside the project');
-  return actual;
-}
+export const safeAuditPath = projectPath;
 export function validateFindings(goal: Goal, findings: AuditFinding[]) {
   if (
     findings.length !== goal.criteria.length ||
@@ -96,7 +96,7 @@ export async function runIndependentAudit(
   settings: Settings,
   callerSignal?: AbortSignal,
   onProgress?: (message: string) => void,
-  verification?: VerificationContext,
+  workspace = new ReviewWorkspace(ctx.cwd),
 ): Promise<Audit> {
   const config = { ...settings.audit, ...goal.auditModel };
   const model =
@@ -107,11 +107,7 @@ export async function runIndependentAudit(
     usageUnknown = false,
     inspected = 0;
   const label = model ? `${model.provider}/${model.id}` : '(unavailable)';
-  const prompt =
-    auditPrompt(goal, summary) +
-    (verification
-      ? `\nVerification backend: Docker Sandboxes. Input digest: ${verification.identity.snapshotDigest}. Read/search/list refer to this frozen input, not the live workspace. The host filesystem is not shared; each approved-check rerun uses a fresh VM.`
-      : '');
+  const prompt = auditPrompt(goal, summary);
   const diagnostics: NonNullable<Audit['diagnostics']> = {
     requests: 0,
     initialPromptChars: prompt.length,
@@ -136,7 +132,6 @@ export async function runIndependentAudit(
     details: string,
     findings: AuditFinding[] = [],
   ): Audit => ({
-    ...(verification ? { verification: verification.identity } : {}),
     at: now(),
     verdict,
     details,
@@ -240,12 +235,15 @@ export async function runIndependentAudit(
           const p = call.arguments;
           diagnostics.toolCalls[call.name] = (diagnostics.toolCalls[call.name] ?? 0) + 1;
           if (call.name === 'audit_result') {
+            if (calls.some((c) => c.name === 'audit_request'))
+              throw new Error('Resolve the information request before submitting a verdict');
             if (!inspectedBeforeResponse)
               throw new Error(
                 'Independently read or check real artifacts first, then review those results in the next response before submitting a verdict',
               );
             const findings = p.findings as unknown as AuditFinding[];
             validateFindings(goal, findings);
+            await workspace.assertCurrent(signal);
             return finish(
               findings.every((f) => f.passed) ? 'pass' : 'fail',
               String(p.details),
@@ -254,6 +252,10 @@ export async function runIndependentAudit(
           } else if (call.name === 'audit_record') {
             let record: string | undefined, index: number | undefined;
             if (p.source === 'check') record = goal.checks.find((c) => c.id === p.id)?.last?.output;
+            else if (p.source === 'request')
+              record = goal.auditRequests.find(
+                (r) => r.id === p.id && r.generation === goal.generation,
+              )?.answer?.text;
             else {
               const entries = (p.source === 'criterion' ? goal.criteria : goal.tasks).find(
                 (item) => item.id === p.id,
@@ -273,27 +275,31 @@ export async function runIndependentAudit(
               text,
               nextOffset: start + text.length < record.length ? start + text.length + 1 : null,
             });
-          } else if (call.name === 'audit_check') {
-            const check = goal.checks.find((c) => c.id === p.id);
-            if (!check) throw new Error('Check is not in the approved scope');
-            if (!verification)
-              throw new EnvironmentError('Approved checks require a frozen verification context.');
-            output = JSON.stringify(await verification.check(check, signal));
-            inspected++;
+          } else if (call.name === 'audit_request') {
+            if (!String(p.question).trim())
+              throw new Error('A specific nonempty question is required');
+            if (!goal.criteria.some((c) => c.id === p.criterionId))
+              throw new Error('Unknown criterion');
+            if (p.checkId && !goal.checks.some((c) => c.id === p.checkId))
+              throw new Error('Check is not in approved scope');
+            const request = {
+              id: randomUUID(),
+              generation: goal.generation,
+              at: now(),
+              criterionId: String(p.criterionId),
+              question: String(p.question),
+              ...(p.checkId ? { checkId: String(p.checkId) } : {}),
+            };
+            progress('Reviewer requests main-session information: ' + request.question);
+            return { ...finish('needs_info', request.question), requests: [request] };
           } else {
-            const path = await safeAuditPath(verification?.cwd ?? ctx.cwd, String(p.path));
             if (call.name === 'audit_list')
-              output = (await readdir(path, { withFileTypes: true }))
+              output = (await workspace.read(String(p.path), 'directory'))
+                .split('\n')
                 .slice(0, 200)
-                .map((x) => `${x.name}${x.isDirectory() ? '/' : ''}`)
                 .join('\n');
             else {
-              const info = await stat(path);
-              if (!info.isFile() || info.size > 5_000_000)
-                throw new Error('Only text files up to 5 MB are supported');
-              const data = await readFile(path, 'utf8');
-              if (data.includes('\0'))
-                throw new Error('Provide a reviewable text or statistical export for binary files');
+              const data = await workspace.read(String(p.path));
               const start = Number(p.offset ?? 1) - 1;
               const lines = data.split('\n');
               const selected =
@@ -322,6 +328,10 @@ export async function runIndependentAudit(
             }
           }
         } catch (e) {
+          if (e instanceof ReviewChangedError) {
+            errorKind = 'input_changed';
+            throw e;
+          }
           output = String(e);
           isError = true;
         }

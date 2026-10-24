@@ -5,9 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { GoalRuntime } from '../src/runtime.ts';
 import { activeGoal } from '../src/state.ts';
-import { EnvironmentError } from '../src/checks.ts';
-import { SandboxError } from '../src/verification/contract.ts';
-import { testSandbox, verificationFixture } from './sandbox-fixtures.mjs';
+import { writeFileSync } from 'node:fs';
 import { WORK_RULES, goalContext, kickoffPrompt, continuationPrompt } from '../src/prompts.ts';
 
 async function harness(t, deps = {}, cwdOverride, sessionId = 'test-session', savedEntries = []) {
@@ -54,14 +52,35 @@ async function harness(t, deps = {}, cwdOverride, sessionId = 'test-session', sa
     ui: { notify() {}, setStatus() {}, setWidget() {}, confirm: async () => true },
   };
   const { check, ...runtimeDeps } = deps;
+  ctx.executeTool = async (name, args, options) => {
+    assert.equal(name, 'bash');
+    const result = check
+      ? await check(cwd, { command: args.command }, options.signal)
+      : { exitCode: 0, output: 'passed' };
+    await events.get('tool_result')?.(
+      {
+        toolName: name,
+        toolCallId: 'main-check-call',
+        parentToolCallId: 'test-tool',
+        input: args,
+      },
+      ctx,
+    );
+    return {
+      toolCall: { id: 'main-check-call', name, arguments: args },
+      isError: result.exitCode !== 0,
+      result: {
+        content: [{ type: 'text', text: result.output }],
+        structuredContent: { exit_code: result.exitCode },
+      },
+    };
+  };
   const rt = new GoalRuntime(pi, {
-    prepareVerification: verificationFixture(check),
     ...runtimeDeps,
     agentDir: join(cwd, 'fake-agent'),
   });
   rt.register();
   await events.get('session_start')({}, ctx);
-  rt.settings.sandbox ??= structuredClone(testSandbox);
   t.after(() => {
     rt.shutdown();
     if (!cwdOverride) rmSync(cwd, { recursive: true, force: true });
@@ -89,6 +108,13 @@ async function harness(t, deps = {}, cwdOverride, sessionId = 'test-session', sa
       return await tools.get(name).execute('test-tool', params, undefined, undefined, ctx);
     },
   };
+}
+async function until(ready) {
+  for (let i = 0; i < 1000; i++) {
+    if (ready()) return;
+    await new Promise((resolve) => setTimeout(resolve, 2));
+  }
+  assert.fail('Expected asynchronous work to start');
 }
 async function start(h, objective = 'Fix bug') {
   await h.cmd(`start ${objective}`);
@@ -187,6 +213,7 @@ test('runtime continues past legacy round/time caps and submits without a deadli
     false,
   );
   const g = h.goal();
+  await h.tool('goal_check', { goal_id: g.id, generation: g.generation, check_id: 'K1' });
   await h.tool('goal_submit', { goal_id: g.id, generation: g.generation, summary: 'done' });
   assert.equal(calls, 1);
   assert.equal(h.goal().status, 'complete');
@@ -440,7 +467,7 @@ test('formal generation counterexample: late pass cannot complete a new verifyin
     generation: old.generation,
     summary: 'old',
   });
-  await new Promise(setImmediate);
+  await until(() => replies.length === 1);
   assert.equal(replies.length, 1);
   await h.cmd('pause');
   await h.cmd('resume');
@@ -450,7 +477,7 @@ test('formal generation counterexample: late pass cannot complete a new verifyin
     generation: current.generation,
     summary: 'new',
   });
-  await new Promise(setImmediate);
+  await until(() => replies.length === 2);
   assert.equal(replies.length, 2);
   replies[0](audit());
   const stale = await pendingOld;
@@ -775,10 +802,11 @@ test('failed mechanical check returns to repair and does not call the independen
     activeGoal(s).checks = [{ id: 'K1', command: 'test regression', timeoutSeconds: 1 }];
   });
   const g = h.goal();
+  await h.tool('goal_check', { goal_id: g.id, generation: g.generation, check_id: 'K1' });
   await h.tool('goal_submit', { goal_id: g.id, generation: g.generation, summary: 'done' });
   assert.equal(calls, 0);
   assert.equal(h.goal().status, 'active');
-  assert.match(h.goal().reason, /regression/);
+  assert.match(h.goal().checks[0].last.output, /regression/);
 });
 test('explicit pause cancels an unbounded stagnation review even without a host signal', async (t) => {
   let began;
@@ -1111,7 +1139,7 @@ test('clear during audit cancels it; a late pass cannot affect a newly started g
     generation: old.generation,
     summary: 'old',
   });
-  await new Promise(setImmediate);
+  await until(() => signal);
   await h.cmd('clear');
   assert.equal(signal.aborted, true);
   await start(h, 'Replacement');
@@ -1154,22 +1182,22 @@ test('clear during a mechanical check rejects its late result before calling the
     activeGoal(s).checks = [{ id: 'K1', command: 'true' }];
   });
   const g = h.goal();
-  const pending = h.tool('goal_submit', {
+  const pending = h.tool('goal_check', {
     goal_id: g.id,
     generation: g.generation,
-    summary: 'check',
+    check_id: 'K1',
   });
-  await new Promise(setImmediate);
+  await until(() => Boolean(signal));
   await h.cmd('clear');
   assert.equal(signal.aborted, true);
   const empty = structuredClone(h.rt.state);
   finish({ at: 'then', command: 'true', exitCode: 0, output: 'late success' });
-  await pending;
+  await assert.rejects(pending);
   assert.equal(audits, 0);
   assert.deepEqual(h.rt.state, empty);
 });
 
-test('a late environment failure from a cleared goal is not applied to its replacement', async (t) => {
+test('a late main check failure from a cleared goal is not applied to its replacement', async (t) => {
   let rejectCheck;
   const h = await harness(t, {
     check: async () =>
@@ -1184,20 +1212,18 @@ test('a late environment failure from a cleared goal is not applied to its repla
     activeGoal(s).checks = [{ id: 'K1', command: 'true' }];
   });
   const old = h.goal();
-  const pending = h.tool('goal_submit', {
+  const pending = h.tool('goal_check', {
     goal_id: old.id,
     generation: old.generation,
-    summary: 'old',
+    check_id: 'K1',
   });
-  await new Promise(setImmediate);
+  await until(() => Boolean(rejectCheck));
   await h.cmd('clear');
   await start(h, 'Replacement');
   const before = structuredClone(h.goal());
-  rejectCheck(new EnvironmentError('late sandbox failure from the old goal'));
-  const result = await pending;
-  assert.equal(result.details.disposition, 'stale_goal');
+  rejectCheck(new Error('late main check failure from the old goal'));
+  await assert.rejects(pending, /late main check failure/);
   assert.deepEqual(h.goal(), before);
-  assert.equal(h.goal().consecutiveEnvironmentFailures, 0);
 });
 
 test('request projection keeps one fresh policy and snapshot after repeated continuations and compaction', async (t) => {
@@ -1757,216 +1783,6 @@ async function startWithChecks(h, checks = [{ command: 'npm test' }]) {
   });
   await evidence(h);
 }
-const checkResult = (overrides = {}) => ({
-  at: new Date().toISOString(),
-  command: 'npm test',
-  exitCode: 0,
-  output: '',
-  environmentKey: 'fixture',
-  ...overrides,
-});
-
-test('verification environment is runtime configuration and is frozen for each submission', async (t) => {
-  const seen = [];
-  const h = await harness(t, {
-    probe: async (_cwd, environment) => {
-      seen.push({ probe: environment });
-      return { ok: true };
-    },
-    check: async (_cwd, check, _signal, environment) => {
-      seen.push({ check: check.id, environment });
-      return checkResult();
-    },
-    audit: async () => audit(),
-  });
-  await startWithChecks(h);
-  const g = h.goal();
-  const before = {
-    generation: g.generation,
-    revision: g.revision,
-    criteria: g.criteria,
-    checks: g.checks,
-  };
-  const result = await h.tool('goal_environment', {
-    goal_id: g.id,
-    generation: g.generation,
-    workspace: 'ephemeral',
-    network: 'open',
-    env: [],
-    reason: 'build writes inside the workspace',
-  });
-  assert.match(result.content[0].text, /Verification environment updated/);
-  const updated = h.goal();
-  assert.deepEqual(updated.verification, {
-    workspace: 'ephemeral',
-    network: 'open',
-    env: [],
-  });
-  assert.equal(updated.generation, before.generation, 'environment changes are not scope changes');
-  assert.equal(updated.approved, true);
-  assert.deepEqual(updated.criteria, before.criteria);
-  assert.deepEqual(updated.checks, before.checks);
-  assert.match(updated.notes.at(-1), /build writes inside the workspace/);
-  assert.deepEqual(seen[0], {
-    probe: { workspace: 'ephemeral', network: 'open', env: [] },
-  });
-  const unchanged = await h.tool('goal_environment', {
-    goal_id: updated.id,
-    generation: updated.generation,
-    workspace: 'ephemeral',
-  });
-  assert.match(unchanged.content[0].text, /unchanged/);
-  const submitted = await h.tool('goal_submit', {
-    goal_id: updated.id,
-    generation: updated.generation,
-    summary: 'done',
-  });
-  assert.equal(h.goal().status, 'complete');
-  assert.match(submitted.content[0].text, /Audit pass/);
-  assert.deepEqual(seen[1], {
-    check: 'K1',
-    environment: { workspace: 'ephemeral', network: 'open', env: [] },
-  });
-  assert.deepEqual(h.goal().verification, {
-    workspace: 'ephemeral',
-    network: 'open',
-    env: [],
-  });
-});
-
-test('environment-classified failures never consume implementation repairs and stop after repeated unchanged settings', async (t) => {
-  let submits = 0;
-  let audits = 0;
-  const h = await harness(t, {
-    probe: async () => ({ ok: true }),
-    check: async () => {
-      submits++;
-      return checkResult({
-        exitCode: 2,
-        output: 'read-only file system',
-        failure: 'environment',
-        hint: 'Use goal_environment with workspace "ephemeral"',
-      });
-    },
-    audit: async () => {
-      audits++;
-      return audit();
-    },
-  });
-  await startWithChecks(h);
-  await h.tool('goal_environment', {
-    goal_id: h.goal().id,
-    generation: h.goal().generation,
-    workspace: 'readonly',
-  });
-  const first = await h.tool('goal_submit', {
-    goal_id: h.goal().id,
-    generation: h.goal().generation,
-    summary: 'done',
-  });
-  assert.equal(h.goal().status, 'active');
-  assert.equal(h.goal().consecutiveAuditFailures, 0);
-  assert.equal(h.goal().consecutiveEnvironmentFailures, 1);
-  assert.equal(h.goal().audits.length, 0);
-  assert.match(first.content[0].text, /not an implementation failure/);
-  assert.match(first.content[0].text, /workspace: read-only snapshot/);
-  assert.match(h.goal().notes.at(-1), /read-only file system|ephemeral/);
-  await h.tool('goal_submit', {
-    goal_id: h.goal().id,
-    generation: h.goal().generation,
-    summary: 'done',
-  });
-  assert.equal(h.goal().consecutiveAuditFailures, 0);
-  assert.equal(h.goal().consecutiveEnvironmentFailures, 2);
-  assert.equal(h.goal().status, 'active');
-  const third = await h.tool('goal_submit', {
-    goal_id: h.goal().id,
-    generation: h.goal().generation,
-    summary: 'done',
-  });
-  assert.equal(h.goal().status, 'paused');
-  assert.equal(h.goal().consecutiveEnvironmentFailures, 3);
-  assert.equal(third.terminate, true);
-  assert.match(h.goal().reason, /Verification environment failed 3 times/);
-  assert.equal(submits, 3);
-  assert.equal(audits, 0);
-  // An explicit environment change resets the counter without touching the approved scope.
-  const paused = h.goal();
-  await h.cmd('resume');
-  assert.equal(h.goal().status, 'active');
-  const changed = await h.tool('goal_environment', {
-    goal_id: h.goal().id,
-    generation: h.goal().generation,
-    workspace: 'ephemeral',
-  });
-  assert.match(changed.content[0].text, /updated/);
-  assert.equal(h.goal().consecutiveEnvironmentFailures, 0);
-  assert.deepEqual(h.goal().criteria, paused.criteria);
-  assert.deepEqual(
-    h.goal().checks.map((c) => c.command),
-    paused.checks.map((c) => c.command),
-  );
-});
-
-test('host verification network requires policy approval and probe failures never apply a change', async (t) => {
-  const asks = [];
-  const h = await harness(t, {
-    probe: async () => ({ ok: true }),
-    check: async () => checkResult(),
-    audit: async () => audit(),
-  });
-  h.rt.settings.permissions = { mode: 'autonomous', network: 'ask', install: 'allow' };
-  await startWithChecks(h);
-  h.ctx.hasUI = true;
-  h.ctx.ui.confirm = async (title, message) => {
-    asks.push({ title, message });
-    return false;
-  };
-  const before = h.goal().verification;
-  const denied = await h.tool('goal_environment', {
-    goal_id: h.goal().id,
-    generation: h.goal().generation,
-    network: 'open',
-  });
-  assert.match(denied.content[0].text, /not approved/);
-  assert.deepEqual(h.goal().verification, before);
-  assert.match(asks[0].title, /verification network/i);
-  assert.match(asks[0].message, /open via HTTP/);
-  h.ctx.ui.confirm = async () => true;
-  await h.tool('goal_environment', {
-    goal_id: h.goal().id,
-    generation: h.goal().generation,
-    network: 'open',
-  });
-  assert.equal(h.goal().verification.network, 'open');
-  assert.equal(h.goal().permissions.length, 1);
-  assert.match(h.goal().permissions[0], /^[a-f0-9]{64}$/);
-  // A second policy-asked change reuses the recorded grant without another prompt.
-  const prompts = asks.length;
-  await h.tool('goal_environment', {
-    goal_id: h.goal().id,
-    generation: h.goal().generation,
-    workspace: 'ephemeral',
-  });
-  assert.equal(asks.length, prompts);
-  const failing = await harness(t, {
-    probe: async () => ({ ok: false, hint: 'sandbox profile unavailable' }),
-    audit: async () => audit(),
-  });
-  await startWithChecks(failing);
-  const applied = await failing.tool('goal_environment', {
-    goal_id: failing.goal().id,
-    generation: failing.goal().generation,
-    workspace: 'readonly',
-  });
-  assert.match(applied.content[0].text, /not applied: sandbox profile unavailable/);
-  assert.deepEqual(failing.goal().verification, {
-    workspace: 'ephemeral',
-    network: 'isolated',
-    env: [],
-  });
-  assert.equal(failing.goal().consecutiveEnvironmentFailures, 0);
-});
 
 test('goal_status defaults to a compact summary and the full view keeps complete evidence', async (t) => {
   const h = await harness(t);
@@ -2032,151 +1848,240 @@ test('goal_evidence pages recorded evidence without claiming ownership or changi
   assert.equal(missing.details.disposition, 'stale_goal');
 });
 
-test('Docker verification finalization gates completion and preserves incurred audit usage', async (t) => {
-  for (const failure of [undefined, 'input_changed', 'cleanup', 'check']) {
-    let finished = false;
-    const identity = {
-      backend: 'docker-sandboxes',
-      attemptId: 'fixture',
-      snapshotDigest: 'frozen',
-      environmentDigest: 'offline',
-      specDigest: 'approved',
-    };
-    const verification = {
-      cwd: '/frozen-inputs',
-      identity,
-      manifest: { entries: [], excluded: [] },
-      check: async () => assert.fail('no checks in this fixture'),
-      finish: async (passing) => {
-        assert.equal(passing, true);
-        finished = true;
-        if (failure) throw new SandboxError(`fixture ${failure}`, failure);
-      },
-    };
-    const h = await harness(t, {
-      prepareVerification: async () => verification,
-      audit: async (_g, _s, _ctx, _settings, _signal, _progress, frozen) => {
-        assert.equal(frozen, verification);
-        assert.equal(finished, false);
-        return audit();
-      },
-    });
-    h.rt.settings.sandbox = { backend: 'docker-sandboxes' };
-    await start(h);
-    await evidence(h);
-    const g = h.goal();
-    await h.tool('goal_submit', { goal_id: g.id, generation: g.generation, summary: 'done' });
-    assert.equal(finished, true);
-    assert.equal(h.goal().usage.auditTokens, 10);
-    assert.equal(
-      h.goal().status,
-      failure === 'cleanup' ? 'paused' : failure ? 'active' : 'complete',
-    );
-    assert.equal(h.goal().consecutiveAuditFailures, failure === 'check' ? 1 : 0);
-    if (!failure) assert.deepEqual(h.goal().audits.at(-1).verification, identity);
-  }
-});
-
-test('missing microVM profile blocks even a submission with no command checks', async (t) => {
-  const h = await harness(t, { audit: async () => assert.fail('audit must not run') });
-  delete h.rt.settings.sandbox;
-  await start(h);
-  await evidence(h);
-  const g = h.goal();
-  const result = await h.tool('goal_submit', {
-    goal_id: g.id,
-    generation: g.generation,
-    summary: 'done',
-  });
-  assert.match(result.content[0].text, /Configure Docker Sandboxes/);
-  assert.notEqual(h.goal().status, 'complete');
-  assert.equal(h.goal().consecutiveEnvironmentFailures, 1);
-});
-
-test('network approval is bound to destinations; an old grant cannot authorize broader egress', async (t) => {
-  const h = await harness(t, { probe: async () => ({ ok: true }) });
-  h.rt.settings.permissions = { mode: 'autonomous', network: 'ask', install: 'allow' };
-  await start(h);
-  h.ctx.hasUI = true;
-  let asks = 0,
-    accept = true;
-  h.ctx.ui.confirm = async () => {
-    asks++;
-    return accept;
-  };
-  const key = { goal_id: h.goal().id, generation: h.goal().generation };
-  await h.tool('goal_environment', { ...key, network: 'allowlist', allow: ['example.com'] });
-  assert.equal(asks, 1);
-  await h.tool('goal_environment', { ...key, workspace: 'ephemeral' });
-  assert.equal(asks, 1, 'workspace-only changes reuse the network grant');
-  accept = false;
-  await h.tool('goal_environment', { ...key, allow: ['example.com', 'example.org'] });
-  assert.equal(asks, 2);
-  assert.deepEqual(h.goal().verification.allow, ['example.com']);
-  await h.tool('goal_environment', { ...key, network: 'open' });
-  assert.equal(asks, 3);
-  assert.equal(h.goal().verification.network, 'allowlist');
-});
-
-test('input inspection is read-only, needs no sandbox profile and never creates a goal', async (t) => {
-  const h = await harness(t);
-  delete h.rt.settings.sandbox;
-  await h.cmd('sandbox inputs');
-  assert.equal(h.rt.state.goals.length, 0);
-  assert.ok(h.messages.some((message) => JSON.stringify(message).includes('source-v2')));
-  await start(h);
-  await h.cmd('pause');
-  h.rt.store.release();
-  const beforeState = structuredClone(h.rt.state);
-  const before = structuredClone(h.goal());
-  const key = { goal_id: before.id, generation: before.generation };
-  const report = await h.tool('goal_environment', { ...key, inspect_inputs: true });
-  assert.equal(report.details.ready, true);
-  assert.deepEqual(h.goal(), before);
-  assert.deepEqual(h.rt.state, beforeState);
-  await assert.rejects(
-    h.tool('goal_environment', { ...key, inspect_inputs: true, network: 'open' }),
-    /cannot be combined/,
-  );
-  await assert.rejects(h.tool('goal_environment', { ...key, input_offset: 0 }), /requires/);
-});
-
-test('explicit environment values persist without host inheritance or scope modification', async (t) => {
-  const h = await harness(t, { probe: async () => ({ ok: true }) });
-  await start(h);
-  const key = { goal_id: h.goal().id, generation: h.goal().generation };
-  const scope = structuredClone(h.goal().checks);
-  await h.tool('goal_environment', { ...key, variables: { CI: '1', TZ: 'UTC' } });
-  assert.deepEqual(h.goal().verification.variables, { CI: '1', TZ: 'UTC' });
-  assert.deepEqual(h.goal().checks, scope);
-  assert.equal(h.goal().generation, key.generation);
-  await assert.rejects(
-    h.tool('goal_environment', { ...key, variables: { HTTP_PROXY: 'http://outside' } }),
-    /reserved/,
-  );
-  assert.deepEqual(h.goal().verification.variables, { CI: '1', TZ: 'UTC' });
-  await h.tool('goal_environment', { ...key, variables: {} });
-  assert.equal(h.goal().verification.variables, undefined);
-});
-
-test('Docker preflight failure prevents checks and auditing', async (t) => {
+test('submission revalidates progress changed during asynchronous source inventory', async (t) => {
   const h = await harness(t, {
-    prepareVerification: async () => {
-      throw new SandboxError('sbx unavailable');
-    },
-    audit: async () => assert.fail('audit cannot run without frozen inputs'),
+    audit: async () => assert.fail('incomplete work cannot be reviewed'),
   });
-  h.rt.settings.sandbox = { backend: 'docker-sandboxes' };
   await start(h);
   await evidence(h);
-  const g = h.goal();
-  const result = await h.tool('goal_submit', {
-    goal_id: g.id,
-    generation: g.generation,
-    summary: 'done',
+  h.rt.store.change('fixture.task', (s) => {
+    activeGoal(s).tasks = [{ id: 'T1', text: 'Finish work', status: 'done', evidence: ['done'] }];
   });
-  assert.match(result.content[0].text, /sbx unavailable/);
+  const original = h.rt.sourceStamp.bind(h.rt);
+  t.mock.method(h.rt, 'sourceStamp', async (...args) => {
+    const stamp = await original(...args);
+    await h.tool('goal_progress', {
+      ...goalKey(h),
+      task_id: 'T1',
+      task_status: 'active',
+      note: 'Reopened task',
+      next_step: 'finish it',
+    });
+    return stamp;
+  });
+  await assert.rejects(h.tool('goal_submit', { ...goalKey(h), summary: 'done' }));
+  assert.equal(h.goal().status, 'active');
+  assert.equal(h.goal().tasks[0].status, 'active');
+});
+
+test('source changes during a main-session check cannot certify the resulting version', async (t) => {
+  let mutate = true,
+    reviews = 0;
+  const h = await harness(t, {
+    check: async (cwd) => {
+      if (mutate) writeFileSync(join(cwd, 'source.txt'), 'changed after test assertions');
+      return { exitCode: 0, output: 'tests passed before the source changed' };
+    },
+    audit: async () => {
+      reviews++;
+      return audit();
+    },
+  });
+  await startWithChecks(h);
+  writeFileSync(join(h.ctx.cwd, 'source.txt'), 'original');
+  await h.tool('goal_check', { ...goalKey(h), check_id: 'K1' });
+  const result = await h.tool('goal_submit', { ...goalKey(h), summary: 'done' });
+  assert.equal(result.details.disposition, 'evidence_needed');
+  assert.equal(reviews, 0);
+  assert.equal(h.goal().checks[0].last.exitCode, 0, 'retain the actual tool exit code');
+  assert.equal(h.goal().checks[0].last.success, false);
+  mutate = false;
+  await h.tool('goal_check', { ...goalKey(h), check_id: 'K1' });
+  await h.tool('goal_submit', { ...goalKey(h), summary: 'done' });
+  assert.equal(h.goal().status, 'complete');
+});
+for (const interruption of ['throw', 'abort'])
+  test(`a ${interruption} during a rerun invalidates the previous successful check`, async (t) => {
+    let retry = false;
+    const controller = new AbortController();
+    const h = await harness(t, {
+      check: async () => {
+        if (retry && interruption === 'throw') throw new Error('check interrupted');
+        if (retry) controller.abort();
+        return { exitCode: 0, output: 'passed' };
+      },
+      audit: async () => audit(),
+    });
+    await startWithChecks(h);
+    await h.tool('goal_check', { ...goalKey(h), check_id: 'K1' });
+    assert.equal(h.goal().checks[0].last.success, true);
+    retry = true;
+    h.ctx.signal = controller.signal;
+    await assert.rejects(
+      h.tool('goal_check', { ...goalKey(h), check_id: 'K1' }),
+      /interrupted|aborted/i,
+    );
+    h.ctx.signal = undefined;
+    assert.equal(h.goal().checks[0].last, undefined);
+    assert.equal(
+      (await h.tool('goal_submit', { ...goalKey(h), summary: 'done' })).details.disposition,
+      'evidence_needed',
+    );
+  });
+for (const toolName of ['goal_check', 'goal_reply'])
+  test(`stale ${toolName} calls do not claim or block a paused replacement goal`, async (t) => {
+    const h = await harness(t);
+    await start(h);
+    const key = goalKey(h);
+    await h.cmd('clear');
+    await start(h, 'Replacement task');
+    await h.cmd('pause');
+    const before = structuredClone(h.rt.state);
+    assert.equal(h.rt.store.owns(), false);
+    assert.equal(await h.emit('tool_call', { toolName, input: key }), undefined);
+    assert.equal((await h.tool(toolName, key)).details.disposition, 'stale_goal');
+    assert.deepEqual(h.rt.state, before);
+    assert.equal(h.rt.store.owns(), false);
+  });
+
+test('main checks are explicit, recorded from tool metadata and invalidated by source changes', async (t) => {
+  let runs = 0,
+    reviews = 0;
+  const h = await harness(t, {
+    check: async () => {
+      runs++;
+      return { exitCode: 0, output: 'passed' };
+    },
+    audit: async () => {
+      reviews++;
+      return audit();
+    },
+  });
+  await startWithChecks(h);
+  writeFileSync(join(h.ctx.cwd, 'source.txt'), 'v1');
+  const submit = () => h.tool('goal_submit', { ...goalKey(h), summary: 'done' });
+  assert.equal((await submit()).details.disposition, 'evidence_needed');
+  assert.equal(runs, 0);
+  assert.equal(reviews, 0);
+  await h.tool('goal_check', { ...goalKey(h), check_id: 'K1' });
+  assert.equal(h.goal().checks[0].last.source, 'main-session');
+  writeFileSync(join(h.ctx.cwd, 'source.txt'), 'v2');
+  assert.match((await submit()).content[0].text, /source inputs changed/);
+  await h.tool('goal_check', { ...goalKey(h), check_id: 'K1' });
+  await submit();
+  assert.equal(h.goal().status, 'complete');
+  assert.equal(runs, 2);
+  assert.equal(reviews, 1);
+});
+
+test('reviewer information requests persist, do not spend repair attempts, and require a fresh audit', async (t) => {
+  let reviews = 0;
+  const h = await harness(t, {
+    audit: async (g) => {
+      reviews++;
+      if (reviews === 1)
+        return {
+          ...audit('needs_info'),
+          requests: [
+            {
+              id: 'request-1',
+              at: 'now',
+              generation: g.generation,
+              criterionId: 'C1',
+              question: 'Where is the result?',
+            },
+          ],
+        };
+      assert.match(g.auditRequests[0].answer.text, /result.txt/);
+      return audit();
+    },
+  });
+  await start(h);
+  await evidence(h);
+  const submit = () => h.tool('goal_submit', { ...goalKey(h), summary: 'done' });
+  const first = await submit();
+  assert.equal(first.details.verdict, 'needs_info');
   assert.equal(h.goal().status, 'active');
   assert.equal(h.goal().consecutiveAuditFailures, 0);
-  assert.equal(h.goal().consecutiveEnvironmentFailures, 1);
+  assert.equal((await submit()).details.disposition, 'evidence_needed');
+  assert.equal(reviews, 1);
+  await h.tool('goal_reply', {
+    ...goalKey(h),
+    request_id: 'request-1',
+    answer: 'result.txt:1 contains the result',
+  });
+  assert.equal(h.goal().status, 'active');
+  await submit();
+  assert.equal(h.goal().status, 'complete');
+  assert.equal(reviews, 2);
+  assert.equal(h.goal().usage.auditTokens, 20);
+});
+
+test('stale reviewer requests cannot be answered after user supplements or clear', async (t) => {
+  const h = await harness(t, {
+    audit: async (g) => ({
+      ...audit('needs_info'),
+      requests: [
+        {
+          id: 'old-request',
+          at: 'now',
+          generation: g.generation,
+          criterionId: 'C1',
+          question: 'Explain the result',
+        },
+      ],
+    }),
+  });
+  await start(h);
+  await evidence(h);
+  await h.tool('goal_submit', { ...goalKey(h), summary: 'done' });
+  await h.emit('input', { source: 'interactive', text: 'Also check the boundary case' });
+  await assert.rejects(
+    h.tool('goal_reply', { ...goalKey(h), request_id: 'old-request', answer: 'old answer' }),
+    /stale/,
+  );
+  const old = goalKey(h);
+  await h.cmd('clear');
+  assert.equal(
+    (await h.tool('goal_reply', { ...old, request_id: 'old-request', answer: 'old' })).details
+      .disposition,
+    'stale_goal',
+  );
+});
+
+test('review freshness failure preserves incurred usage without completing or counting a repair', async (t) => {
+  const h = await harness(t, {
+    audit: async (_g, _s, ctx, _settings, _signal, _update, workspace) => {
+      await workspace.read('result.txt');
+      writeFileSync(join(ctx.cwd, 'result.txt'), 'changed');
+      return audit();
+    },
+  });
+  writeFileSync(join(h.ctx.cwd, 'result.txt'), 'complete');
+  await start(h);
+  await evidence(h);
+  await h.tool('goal_submit', { ...goalKey(h), summary: 'done' });
+  assert.equal(h.goal().status, 'active');
+  assert.equal(h.goal().audits.at(-1).errorKind, 'input_changed');
+  assert.equal(h.goal().usage.auditTokens, 10);
+  assert.equal(h.goal().consecutiveAuditFailures, 0);
+});
+
+test('old sandbox settings load without executing anything and historical check receipts need rerunning', async (t) => {
+  const h = await harness(t, { audit: async () => audit() });
+  await startWithChecks(h);
+  h.rt.store.change('legacy.fixture', (s) => {
+    const g = activeGoal(s);
+    g.verification = { workspace: 'ephemeral', network: 'open', env: [] };
+    g.checks[0].last = {
+      at: 'past',
+      command: g.checks[0].command,
+      exitCode: 0,
+      output: 'old VM pass',
+    };
+  });
+  const result = await h.tool('goal_submit', { ...goalKey(h), summary: 'done' });
+  assert.equal(result.details.disposition, 'evidence_needed');
+  assert.equal(h.tools.has('goal_environment'), false);
+  assert.equal(Object.hasOwn(h.goal(), 'verification'), false);
 });

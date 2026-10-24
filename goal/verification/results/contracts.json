@@ -68,9 +68,9 @@
       "passed": true
     },
     {
-      "id": "environment",
-      "domain": "Workspace {readonly,ephemeral} x network {isolated,open} x env sets with duplicates; invalid configs; failure signatures.",
-      "assertions": 118,
+      "id": "main-checks",
+      "domain": "Exit codes null/0/1 x error flag x main-session/legacy provenance x matching/stale generation x matching/stale source stamp x present/missing tool ID x stable/changed inputs x approved/rewritten/missing executed command.",
+      "assertions": 1152,
       "passed": true
     },
     {

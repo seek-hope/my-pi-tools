@@ -29,7 +29,7 @@ test('real package entry loads and registers commands/tools with the linked supp
   const loaded = await checkExtensionLoad();
   assert.equal(loaded.version, VERSION);
   assert.equal(loaded.command, 'goal');
-  assert.equal(loaded.tools.length, 9);
+  assert.equal(loaded.tools.length, 10);
 });
 
 test('load check rejects factory errors, missing registrations and mismatched CLI libraries', async (t) => {

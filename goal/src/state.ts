@@ -1,9 +1,4 @@
 import { createHash, randomUUID } from 'node:crypto';
-import {
-  DEFAULT_VERIFICATION,
-  normalizeVerification,
-  type VerificationEnvironment,
-} from './checks.ts';
 
 export type GoalStatus =
   | 'draft'
@@ -32,17 +27,25 @@ export interface Check {
   last?: CheckResult;
 }
 export interface CheckResult {
-  verification?: import('./verification/contract.ts').VerificationIdentity;
   at: string;
   command: string;
-  exitCode: number;
+  exitCode: number | null;
   output: string;
-  /** Hash of the verification environment used for this run. */
-  environmentKey?: string;
-  /** Set when the failure is attributed to the verification environment, not the work. */
-  failure?: 'environment';
-  /** Actionable hint for adjusting the verification environment. */
-  hint?: string;
+  source?: 'main-session';
+  toolCallId?: string;
+  generation?: number;
+  workspaceStamp?: string;
+  inputChanged?: boolean;
+  success?: boolean;
+}
+export interface AuditRequest {
+  id: string;
+  generation: number;
+  at: string;
+  criterionId: string;
+  question: string;
+  checkId?: string;
+  answer?: { at: string; text: string };
 }
 export interface AuditFinding {
   criterionId: string;
@@ -50,15 +53,16 @@ export interface AuditFinding {
   evidence: string;
 }
 export interface Audit {
-  verification?: import('./verification/contract.ts').VerificationIdentity;
+  workspaceStamp?: string;
+  requests?: AuditRequest[];
   at: string;
-  verdict: 'pass' | 'fail' | 'error';
+  verdict: 'pass' | 'fail' | 'error' | 'needs_info';
   details: string;
   model: string;
   findings: AuditFinding[];
   tokens: number;
   usageUnknown: boolean;
-  errorKind?: 'budget';
+  errorKind?: 'budget' | 'input_changed';
   diagnostics?: {
     requests: number;
     initialPromptChars: number;
@@ -113,10 +117,8 @@ export interface Goal {
   criteria: Criterion[];
   tasks: Task[];
   checks: Check[];
-  /** Runtime capabilities for approved checks; not part of the approved specification. */
-  verification: VerificationEnvironment;
-  /** Consecutive environment-classified failures with the current environment. */
-  consecutiveEnvironmentFailures: number;
+  /** Requests from temporary reviewers; answers are executor evidence, not verdicts. */
+  auditRequests: AuditRequest[];
   notes: string[];
   inputs: string[];
   nextStep: string;
@@ -231,8 +233,7 @@ export function makeGoal(
     criteria: [],
     tasks: [],
     checks: [],
-    verification: { ...DEFAULT_VERIFICATION, env: [] },
-    consecutiveEnvironmentFailures: 0,
+    auditRequests: [],
     notes: [],
     inputs: [],
     nextStep: '',
@@ -284,7 +285,6 @@ export function resumeGoal(g: Goal) {
   g.epoch = { turns: 0, seconds: 0 };
   g.noProgressTurns = 0;
   g.consecutiveAuditFailures = 0;
-  g.consecutiveEnvironmentFailures = 0;
   transition(g, 'active');
   delete g.resumeAfterInput;
 }
@@ -457,13 +457,8 @@ export function validateState(value: unknown): asserts value is ProjectState {
       throw new Error('Invalid goal record');
     ids.add(g.id);
     validateLimits(g.limits);
-    normalizeVerification(g.verification);
-    if (
-      g.consecutiveEnvironmentFailures !== undefined &&
-      (!Number.isSafeInteger(g.consecutiveEnvironmentFailures) ||
-        g.consecutiveEnvironmentFailures < 0)
-    )
-      throw new Error('Invalid verification failure counter');
+    if (g.auditRequests !== undefined && !Array.isArray(g.auditRequests))
+      throw new Error('Invalid audit requests');
     if (g.permissionPolicy !== undefined) validatePermissionPolicy(g.permissionPolicy);
   }
   if (s.activeId !== null && !ids.has(s.activeId))

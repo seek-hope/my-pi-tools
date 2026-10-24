@@ -76,19 +76,19 @@ IDs accept unique prefixes. An unapproved draft at the queue head prevents autom
 1. Agree on the objective, criteria, tasks and checks.
 2. Execute through normal Pi tools and record evidence and next steps with `goal_progress`.
 3. Request native continuation at `agent_before_settle`, yielding to queued user input. Cancellation and errors do not silently restart work.
-4. At candidate completion, rerun every approved check in the goal's declared verification environment.
-5. A fresh, read-only audit context inspects artifacts and reports a finding for every criterion.
+4. Run each approved check with `goal_check` in the main session; it records the actual tool result.
+5. `goal_submit` starts a fresh read-only reviewer. It can request information with `audit_request`; the main session answers with `goal_reply` and resubmits.
 6. A failed audit returns concrete repair feedback. Only an accepted current result completes the goal and advances the approved queue.
 
 The executor cannot set `complete`. The auditor must actually inspect artifacts and see the tool results in a later model response before submitting a verdict; a prewritten read-and-pass batch is rejected. Executor evidence is a claim, not independent inspection. Models can still misjudge evidence; explicit findings and deterministic checks make decisions reviewable.
 
-### Verification environment
+### Main-session execution and read-only review
 
-[Docker Sandboxes](docs/docker-sandboxes-setup.md) is the only verification backend. Each check and audit rerun uses a fresh microVM and frozen source inputs; cleanup is required before completion. Configure a pinned profile in personal settings. Missing configuration blocks verification. Ordinary Pi tools remain on the host.
+All file changes, commands and dependency installation belong to the main session. `goal_check` delegates approved commands to its normal bash tool and permissions; `goal_submit` runs no commands. Temporary reviewers have explicit read-only tools and no inherited extensions or MCP. No Docker profile or subagent package is required.
 
-Use `goal_environment` to select a `readonly` or disposable `ephemeral` workspace, and `isolated`, `allowlist` or `open` networking with explicit `allow`/`deny` destinations. Online traffic uses a controlled HTTP/HTTPS proxy; direct external networking and host services are unavailable. New goals default to `ephemeral`; existing goals retain their settings. Host variable forwarding is not supported (`env: []`), but `variables` accepts explicit non-secret values such as `CI` and `TZ`. Inspect selected inputs with `/goal sandbox inputs` before verification. The [boundary design](docs/sandbox-boundary.md) explains safe links, project-bound fixture exceptions and what remains on the host.
+A reviewer can yield `needs_info` with a request ID, question and criterion. The main session supplies concrete information through `goal_reply`, runs any required approved check, then resubmits. Requests do not spend repair attempts and answers never count as an audit pass. Current-generation answers persist across reload.
 
-Environment changes need no `/goal approve`; explicit network permission policies still apply. Network grants bind the exact mode and destinations. Environment failures cannot complete a goal or consume implementation repair attempts; three consecutive failures pause work. See [verification environments](docs/verification-environment.md) and [real acceptance results](docs/docker-sandboxes-acceptance.md).
+Fresh check receipts and unchanged reviewed artifacts are required for completion. See [execution, review and migration](docs/read-only-review.md) for source-marker exclusions, the application-level capability boundary and legacy settings.
 
 ### Storage and context efficiency
 
@@ -139,9 +139,9 @@ Policies are saved with each goal. Legacy goals without a policy inherit configu
 
 Explicit `network: "ask"` and `install: "ask"` settings are respected. The command above explicitly switches both to allow for that goal. Unapproved scope still requires approval.
 
-The auditor has only `audit_read`, `audit_search`, `audit_list`, `audit_record`, `audit_check` and `audit_result`. Reading frozen executor records does not count as independent inspection. Real-path validation prevents escaping the project through parent paths or symlinks. `audit_check` reruns an approved check in the same declared verification environment as submission. Text files are limited to 5 MB per file; binary artifacts need reviewable text/statistical exports.
+The reviewer has only `audit_read`, `audit_search`, `audit_list`, `audit_record`, `audit_request` and `audit_result`. Evidence records and answers do not count as independent inspection. Paths must resolve inside the project; text files are limited to 5 MB. A later response must review actual artifact results before a verdict.
 
-**Checks require Docker Sandboxes and pinned template/check images.** Source, home directories and host sockets are never mounted. Checks run as non-root inside a restricted container in a fresh microVM; workspace writes are discarded. A failed start or cleanup never falls back to unrestricted execution. See [setup and boundaries](docs/docker-sandboxes-setup.md).
+**Checks execute through the main session.** Its existing tool permissions and environment apply, and writes remain in the project. The reviewer cannot run commands. Old `sandbox` settings are ignored; unfinished goals must rerun approved checks through `goal_check`. [Boundary and migration](docs/read-only-review.md).
 
 ## Configuration
 

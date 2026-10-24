@@ -99,7 +99,7 @@ test('audit instructions and tool descriptions distinguish navigation from later
       const prompt = input.messages[0].content;
       assert.match(
         prompt,
-        /audit_list is directory navigation only and does not satisfy artifact inspection/,
+        /audit_list is navigation only and does not satisfy artifact inspection/,
       );
       assert.match(prompt, /only in a later model response after receiving and reviewing/);
       assert.match(
@@ -409,7 +409,7 @@ test('bounded file reads report continuation and search locates distant evidence
   assert.equal(result.verdict, 'pass');
   assert.equal(result.tokens, 34);
 });
-test('audit_check cannot execute on the host without a verification context', async (t) => {
+test('audit_check is not available to the read-only reviewer', async (t) => {
   const { cwd, goal } = setup(t);
   goal.checks = [{ id: 'K1', command: 'touch should-not-exist' }];
   let rejected = false;
@@ -429,7 +429,7 @@ test('audit_check cannot execute on the host without a verification context', as
         );
         if (result) {
           assert.equal(result.isError, true);
-          assert.match(result.content[0].text, /frozen verification context/);
+          assert.match(result.content[0].text, /Unknown tool/);
           rejected = true;
         }
       },
@@ -439,6 +439,102 @@ test('audit_check cannot execute on the host without a verification context', as
   assert.equal(rejected, true);
   assert.equal(existsSync(join(cwd, 'should-not-exist')), false);
 });
+test('reviewer yields an identified information request without write or execution capabilities', async (t) => {
+  const { cwd, goal } = setup(t);
+  const ctx = context(
+    cwd,
+    [[call('audit_request', { criterionId: 'C1', question: 'Where is the result?' })]],
+    (input) => {
+      assert.deepEqual(
+        input.tools.map((t) => t.name).sort(),
+        [
+          'audit_read',
+          'audit_search',
+          'audit_record',
+          'audit_list',
+          'audit_request',
+          'audit_result',
+        ].sort(),
+      );
+    },
+  );
+  const result = await runIndependentAudit(goal, 'done', ctx, defaults);
+  assert.equal(result.verdict, 'needs_info');
+  assert.equal(result.requests[0].generation, goal.generation);
+  assert.ok(result.requests[0].id);
+  assert.equal(result.tokens, 17);
+  assert.equal(result.diagnostics.requests, 1);
+});
+
+test('fresh review can read a full answer but that answer alone does not satisfy inspection', async (t) => {
+  const { cwd, goal } = setup(t);
+  goal.auditRequests = [
+    {
+      id: 'question',
+      generation: goal.generation,
+      at: 'now',
+      criterionId: 'C1',
+      question: 'Where?',
+      answer: { at: 'now', text: 'result.txt:1 complete' },
+    },
+  ];
+  const result = await runIndependentAudit(
+    goal,
+    'done',
+    context(
+      cwd,
+      [
+        [call('audit_record', { source: 'request', id: 'question' })],
+        [verdict()],
+        [call('audit_read', { path: 'result.txt' })],
+        [verdict()],
+      ],
+      (input) => {
+        const answer = input.messages.find(
+          (m) => m.role === 'toolResult' && m.toolName === 'audit_record',
+        );
+        if (answer) assert.match(answer.content[0].text, /result.txt:1 complete/);
+      },
+    ),
+    defaults,
+  );
+  assert.equal(result.verdict, 'pass');
+  assert.equal(result.diagnostics.requests, 4);
+});
+
+test('an information request cannot be bypassed by a pass in the same response', async (t) => {
+  const { cwd, goal } = setup(t);
+  const result = await runIndependentAudit(
+    goal,
+    'done',
+    context(cwd, [
+      [call('audit_read', { path: 'result.txt' })],
+      [
+        verdict(),
+        call('audit_request', { criterionId: 'C1', question: 'Explain the boundary case' }),
+      ],
+    ]),
+    defaults,
+  );
+  assert.equal(result.verdict, 'needs_info');
+});
+
+test('request cannot name an unapproved check or an unknown criterion', async (t) => {
+  const { cwd, goal } = setup(t);
+  const result = await runIndependentAudit(
+    goal,
+    'done',
+    context(cwd, [
+      [call('audit_request', { criterionId: 'C9', question: 'New scope' })],
+      [call('audit_request', { criterionId: 'C1', question: 'Run it', checkId: 'K9' })],
+      [call('audit_request', { criterionId: 'C1', question: 'Clarify the existing artifact' })],
+    ]),
+    defaults,
+  );
+  assert.equal(result.verdict, 'needs_info');
+  assert.equal(result.diagnostics.requests, 3);
+});
+
 test('opt-in confirm policy distinguishes checks, installation, publication and paths outside project', (t) => {
   const { cwd } = setup(t);
   const policy = permissionDefaults('confirm');
@@ -453,53 +549,4 @@ test('opt-in confirm policy distinguishes checks, installation, publication and 
   ])
     assert.ok(permissionReason('bash', { command }, cwd, policy), command);
   assert.ok(permissionReason('write', { path: '/tmp/outside-goal.txt' }, cwd, policy));
-});
-
-test('auditor reads frozen files and delegates reruns through the same verification context', async (t) => {
-  const { cwd, goal } = setup(t);
-  const frozen = mkdtempSync(join(tmpdir(), 'goal-frozen-audit-'));
-  t.after(() => rmSync(frozen, { recursive: true, force: true }));
-  writeFileSync(join(frozen, 'result.txt'), 'frozen version\n');
-  goal.checks = [{ id: 'K1', command: 'approved command' }];
-  let checked = false,
-    readFrozen = false;
-  const verification = {
-    cwd: frozen,
-    identity: { backend: 'docker-sandboxes', snapshotDigest: 'fixture' },
-    check: async (check) => {
-      assert.equal(check.command, 'approved command');
-      checked = true;
-      return { exitCode: 0, output: 'independent rerun' };
-    },
-  };
-  const ctx = context(
-    cwd,
-    [
-      [call('audit_read', { path: 'result.txt' })],
-      [call('audit_check', { id: 'K1' })],
-      [verdict()],
-    ],
-    (input) => {
-      const record = input.messages.find(
-        (m) => m.role === 'toolResult' && m.toolName === 'audit_read',
-      );
-      if (record) {
-        assert.match(record.content[0].text, /frozen version/);
-        assert.doesNotMatch(record.content[0].text, /complete/);
-        readFrozen = true;
-      }
-    },
-  );
-  const result = await runIndependentAudit(
-    goal,
-    'done',
-    ctx,
-    defaults,
-    undefined,
-    undefined,
-    verification,
-  );
-  assert.equal(result.verdict, 'pass');
-  assert.equal(checked && readFrozen, true);
-  assert.deepEqual(result.verification, verification.identity);
 });

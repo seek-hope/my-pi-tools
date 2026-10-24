@@ -42,22 +42,12 @@ import {
   continuationPrompt,
 } from './prompts.ts';
 import { runIndependentAudit } from './auditor.ts';
-import {
-  EnvironmentError,
-  normalizeVerification,
-  type VerificationEnvironment,
-  verificationKey,
-  verificationSummary,
-} from './checks.ts';
+import { checkProblems, checkResult } from './checks.ts';
+import { ReviewWorkspace, ReviewChangedError, workspaceStamp } from './review-workspace.ts';
 import { reviewStagnation } from './stagnation.ts';
 import { permissionKey, permissionReason, permissionSummary } from './permissions.ts';
 import { goalStatusText, renderGoalWidget } from './tui.ts';
 import { confirmPendingScope, formatPendingScope } from './approval.ts';
-import { join } from 'node:path';
-import { prepareVerification, type VerificationContext } from './verification/pipeline.ts';
-import { SandboxError } from './verification/contract.ts';
-import { inspectInputs, inputPage } from './verification/snapshot.ts';
-import { DockerSandboxes } from './verification/docker-sandboxes.ts';
 
 type Context = ExtensionContext;
 type PanelMode = 'compact' | 'expanded' | 'hidden';
@@ -82,17 +72,9 @@ interface Fence {
 }
 export interface Dependencies {
   audit?: typeof runIndependentAudit;
-  probe?: (
-    cwd: string,
-    environment: VerificationEnvironment,
-    signal?: AbortSignal,
-  ) => Promise<{ ok: true } | { ok: false; hint: string }>;
-  prepareVerification?: typeof prepareVerification;
   stagnation?: typeof reviewStagnation;
   agentDir?: string;
 }
-/** Environment problems stop the loop after repeated identical failures, never as a completion. */
-const MAX_ENVIRONMENT_FAILURES = 3;
 export class GoalRuntime {
   store?: ProjectStore;
   settings: Settings = structuredClone(defaults);
@@ -100,6 +82,7 @@ export class GoalRuntime {
   private context?: Context;
   private timer?: ReturnType<typeof setInterval>;
   private auditController?: AbortController;
+  private checkCall?: { parentId: string; commands: Map<string, string> };
   private turn?: Fence;
   private clearAfterTurn?: Fence;
   private fingerprints = new Set<string>();
@@ -129,6 +112,15 @@ export class GoalRuntime {
     });
     if (this.context) this.render(this.context);
     return state;
+  }
+  private sourceStamp(ctx: Context, signal?: AbortSignal) {
+    return workspaceStamp(
+      ctx.cwd,
+      signal,
+      [this.deps.agentDir ?? getAgentDir(), ctx.sessionManager.getSessionFile?.()].filter(
+        (p): p is string => Boolean(p),
+      ),
+    );
   }
   private fence(g: Goal): Fence {
     return { store: this.store!, token: this.store!.token, id: g.id, generation: g.generation };
@@ -552,6 +544,14 @@ export class GoalRuntime {
     pi.on('tool_execution_start', (event) => {
       if (this.turn) this.toolInputs.set(event.toolCallId, event.args);
     });
+    pi.on('tool_result', (event) => {
+      if (
+        event.toolName === 'bash' &&
+        event.parentToolCallId === this.checkCall?.parentId &&
+        typeof event.input.command === 'string'
+      )
+        this.checkCall?.commands.set(event.toolCallId, event.input.command);
+    });
     pi.on('tool_execution_end', (event) => {
       const input = this.toolInputs.get(event.toolCallId);
       this.toolInputs.delete(event.toolCallId);
@@ -713,7 +713,9 @@ export class GoalRuntime {
         ['goal_create', 'goal_resume', 'goal_plan', 'goal_status', 'goal_evidence'].includes(
           event.toolName,
         ) ||
-        (['goal_progress', 'goal_wait', 'goal_submit'].includes(event.toolName) &&
+        (['goal_progress', 'goal_wait', 'goal_submit', 'goal_check', 'goal_reply'].includes(
+          event.toolName,
+        ) &&
           !s.goals.some((g) => g.id === (event.input as { goal_id?: string }).goal_id))
       )
         return;
@@ -749,7 +751,6 @@ export class GoalRuntime {
           'goal_evidence',
           'goal_plan',
           'goal_wait',
-          'goal_environment',
         ].includes(event.toolName)
       )
         return {
@@ -1053,158 +1054,97 @@ export class GoalRuntime {
       },
     });
     pi.registerTool({
-      name: 'goal_environment',
-      label: 'Verification environment',
+      name: 'goal_check',
+      label: 'Run approved check in main session',
       description:
-        'Configure Docker Sandboxes verification. workspace "ephemeral" permits disposable writes. network "isolated" blocks egress; "allowlist" permits allow destinations; "open" permits public destinations except deny. Destinations are DNS names, optional *. subdomains and :port. Online checks must use HTTP_PROXY/HTTPS_PROXY; direct TCP/UDP and host services remain unavailable. Network changes follow the goal permission policy. env must be empty (no host inheritance). variables sets explicit non-secret strings saved in goal history; proxy, execution-control and credential names are reserved. Set inspect_inputs=true to preview selected/excluded/rejected paths without changing the environment or creating a VM; input_offset pages the inventory. Settings are frozen for each submission and audit.',
+        'Run one approved check through the main session bash tool and record its actual structured result. Host tools, permissions and environment apply. The read-only reviewer cannot call this tool. Use before goal_submit; rerun if source inputs change.',
+      executionMode: 'sequential',
+      reachesTools: () => ['bash'],
+      parameters: Type.Object({ ...identity.properties, check_id: Type.String() }),
+      execute: async (_id, p, signal, update, ctx) => {
+        const missing = this.missingGoalResult(p.goal_id);
+        if (missing) return missing;
+        const g = this.require(p.goal_id, p.generation);
+        const check = g.checks.find((c) => c.id === p.check_id);
+        if (!check || !g.approved || g.pendingSpec)
+          throw new Error('Check is not in the approved current scope');
+        const fence = this.fence(g);
+        const controller = new AbortController();
+        const call = { parentId: _id, commands: new Map<string, string>() };
+        this.checkCall = call;
+        this.auditController = controller;
+        const combined = AbortSignal.any([
+          controller.signal,
+          ...(signal ? [signal] : []),
+          ...(ctx.signal ? [ctx.signal] : []),
+        ]);
+        try {
+          combined.throwIfAborted();
+          this.write('check.start', (s) => {
+            delete activeGoal(s)!.checks.find((c) => c.id === check.id)!.last;
+          });
+          const before = await this.sourceStamp(ctx, combined);
+          combined.throwIfAborted();
+          this.current(fence, ['active']);
+          const outcome = await ctx.executeTool(
+            'bash',
+            { command: check.command },
+            { signal: combined, onUpdate: update },
+          );
+          combined.throwIfAborted();
+          const stamp = await this.sourceStamp(ctx, combined);
+          combined.throwIfAborted();
+          this.current(fence, ['active']);
+          const result = checkResult(
+            g,
+            check,
+            outcome,
+            before,
+            call.commands.get(outcome.toolCall.id),
+            stamp,
+          );
+          this.write('check.result', (s) => {
+            activeGoal(s)!.checks.find((c) => c.id === check.id)!.last = result;
+          });
+          return textResult(JSON.stringify(result), result);
+        } finally {
+          if (this.checkCall === call) this.checkCall = undefined;
+          if (this.auditController === controller) this.auditController = undefined;
+        }
+      },
+    });
+    pi.registerTool({
+      name: 'goal_reply',
+      label: 'Answer reviewer request',
+      description:
+        'Answer a current read-only reviewer request. Supply concrete information or reference actual goal_check results. Answers are executor evidence, never an audit pass. Then resubmit with goal_submit for a fresh review.',
       executionMode: 'sequential',
       parameters: Type.Object({
         ...identity.properties,
-        workspace: Type.Optional(StringEnum(['readonly', 'ephemeral'] as const)),
-        network: Type.Optional(StringEnum(['isolated', 'allowlist', 'open'] as const)),
-        allow: Type.Optional(Type.Array(Type.String({ maxLength: 260 }), { maxItems: 64 })),
-        deny: Type.Optional(Type.Array(Type.String({ maxLength: 260 }), { maxItems: 64 })),
-        env: Type.Optional(
-          Type.Array(Type.String({ pattern: '^[A-Za-z_][A-Za-z0-9_]*$' }), { maxItems: 32 }),
-        ),
-        variables: Type.Optional(
-          Type.Record(Type.String(), Type.String({ maxLength: 4096 }), { maxProperties: 32 }),
-        ),
-        inspect_inputs: Type.Optional(Type.Boolean()),
-        input_offset: Type.Optional(Type.Integer({ minimum: 0 })),
-        reason: Type.Optional(bounded(2000)),
+        request_id: Type.String(),
+        answer: bounded(8000),
       }),
-      execute: async (_id, p, signal, _update, ctx) => {
+      execute: async (_id, p) => {
         const missing = this.missingGoalResult(p.goal_id);
         if (missing) return missing;
-        if (p.inspect_inputs) {
-          const candidate = this.state.goals.find((goal) => goal.id === p.goal_id);
-          if (candidate?.generation !== p.generation)
-            throw new Error('Goal version changed; read goal_status again');
-          if (
-            [p.workspace, p.network, p.allow, p.deny, p.env, p.variables].some(
-              (value) => value !== undefined,
-            )
-          )
-            throw new Error('Input inspection cannot be combined with environment changes');
-          const report = inputPage(
-            await inspectInputs(
-              ctx.cwd,
-              this.settings.sandbox ?? { snapshotBytes: 256 * 1024 * 1024, snapshotFiles: 20000 },
-              signal,
-            ),
-            p.input_offset,
-          );
-          return textResult(JSON.stringify(report, null, 2), report);
-        }
-        if (p.input_offset !== undefined)
-          throw new Error('input_offset requires inspect_inputs=true');
-        let g = this.require(p.goal_id, p.generation, ['draft', 'active']);
-        const next = normalizeVerification({
-          ...g.verification,
-          ...(p.workspace ? { workspace: p.workspace } : {}),
-          ...(p.network ? { network: p.network } : {}),
-          ...(p.allow ? { allow: p.allow } : {}),
-          ...(p.deny ? { deny: p.deny } : {}),
-          ...(p.env ? { env: p.env } : {}),
-          ...(p.variables ? { variables: p.variables } : {}),
-        });
-        if (verificationKey(next) === verificationKey(g.verification))
-          return textResult(
-            'Verification environment is unchanged. Adjust it or explain why the failure is not environmental.',
-            { disposition: 'unchanged', verification: g.verification },
-          );
-        if (this.settings.sandbox) {
-          try {
-            new DockerSandboxes(
-              this.settings.sandbox,
-              join(this.deps.agentDir ?? getAgentDir(), 'goal-sandboxes'),
-            ).validateEnvironment(next);
-          } catch (error) {
-            return textResult(`Verification environment not applied: ${String(error)}`, {
-              disposition: 'environment_error',
-            });
-          }
-        }
-        if (
-          next.network !== 'isolated' &&
-          effectivePermissions(this.settings, g).network === 'ask'
-        ) {
-          const grant = permissionKey('verification.network', {
-            goalId: g.id,
-            policy: JSON.stringify([next.network, next.allow ?? [], next.deny ?? []]),
-          });
-          if (!g.permissions.includes(grant)) {
-            const fence = this.fence(g);
-            const approved = await this.confirm(
-              ctx,
-              'Approve verification network access',
-              `Checks and the independent audit may access these network destinations for goal ${g.id}:\n${verificationSummary(next)}`,
-            );
-            try {
-              g = this.current(fence);
-            } catch {
-              return textResult('Goal changed; the previous authorization is stale', {
-                disposition: 'stale_goal',
-              });
-            }
-            if (!approved)
-              return textResult(
-                'Verification network access was not approved; the environment is unchanged.',
-                { disposition: 'approval_required', verification: g.verification },
-              );
-            this.write('permission.grant', (s) => {
-              activeGoal(s)!.permissions.push(grant);
-            });
-            g = this.current(fence);
-          }
-        }
-        const fence = this.fence(g);
-        const probe = this.deps.probe
-          ? await this.deps.probe(ctx.cwd, next, signal)
-          : this.settings.sandbox
-            ? await (async () => {
-                try {
-                  const backend = new DockerSandboxes(
-                    this.settings.sandbox!,
-                    join(this.deps.agentDir ?? getAgentDir(), 'goal-sandboxes'),
-                  );
-                  backend.validateEnvironment(next);
-                  await backend.doctor(signal);
-                  return { ok: true as const };
-                } catch (error) {
-                  return { ok: false as const, hint: String(error) };
-                }
-              })()
-            : {
-                ok: false as const,
-                hint: 'Configure Docker Sandboxes in personal my-pi-goal.json; no host execution backend exists.',
-              };
-        if (!probe.ok)
-          return textResult(
-            `Verification environment not applied: ${probe.hint}\nFix the sandbox or tooling first; this does not count as an implementation failure.`,
-            { disposition: 'environment_error', hint: probe.hint },
-          );
-        try {
-          this.current(fence);
-        } catch {
-          return textResult('Goal or ownership changed; the environment was not applied.', {
-            disposition: 'stale_goal',
-          });
-        }
-        this.write('verification.update', (s) => {
+        const g = this.require(p.goal_id, p.generation);
+        const request = g.auditRequests.find(
+          (r) => r.id === p.request_id && r.generation === g.generation,
+        );
+        if (!request) throw new Error('Reviewer request is absent or stale');
+        if (!p.answer.trim()) throw new Error('A concrete nonempty answer is required');
+        if (request.answer?.text === p.answer) return textResult('Reply is unchanged.');
+        this.write('audit.reply', (s) => {
           const goal = activeGoal(s)!;
-          goal.verification = next;
-          goal.consecutiveEnvironmentFailures = 0;
-          if (p.reason) {
-            goal.notes.push(`Verification environment: ${p.reason}`);
-            goal.notes = goal.notes.slice(-40);
-          }
+          goal.auditRequests.find((r) => r.id === request.id)!.answer = {
+            at: now(),
+            text: p.answer,
+          };
+          goal.progressVersion++;
+          touch(goal);
         });
-        const state = this.state;
         return textResult(
-          `Verification environment updated: ${verificationSummary(next)}. It applies to the next goal_submit and to the independent audit. Approved checks are unchanged; resubmit the completed work.`,
-          state,
+          'Reply recorded as executor evidence. Complete any requested checks, then call goal_submit for a fresh read-only review.',
         );
       },
     });
@@ -1275,7 +1215,7 @@ export class GoalRuntime {
       name: 'goal_submit',
       label: 'Checks and independent audit',
       description:
-        'Submit candidate completion. Runs approved checks in the declared verification environment (goal_environment), then a fresh independent auditor. A check failure attributed to the environment returns environment guidance without counting as an implementation repair; other failures return concrete feedback. Never complete without a passing audit.',
+        'Submit candidate completion. Requires current passing goal_check records from the main session, then starts a fresh read-only reviewer. The reviewer can request information with audit_request; answer via goal_reply and resubmit. This tool never executes check commands. Never complete without a passing audit.',
       executionMode: 'sequential',
       parameters: Type.Object({ ...identity.properties, summary: bounded(8000) }),
       execute: async (_id, p, signal, update, ctx) => {
@@ -1285,6 +1225,23 @@ export class GoalRuntime {
         const problems = completionProblems(g);
         if (problems.length) throw new Error(problems.join('\n'));
         const fence = this.fence(g);
+        const stamp = await this.sourceStamp(ctx, signal);
+        g = this.current(fence, ['active']);
+        const currentProblems = completionProblems(g);
+        if (currentProblems.length) throw new Error(currentProblems.join('\n'));
+        const missingChecks = checkProblems(g, stamp);
+        const unanswered = g.auditRequests.filter(
+          (r) => r.generation === g.generation && !r.answer,
+        );
+        if (missingChecks.length || unanswered.length)
+          return textResult(
+            JSON.stringify({
+              disposition: 'evidence_needed',
+              checks: missingChecks,
+              requests: unanswered,
+            }),
+            { disposition: 'evidence_needed', checks: missingChecks, requests: unanswered },
+          );
         this.write('audit.start', (s) => {
           const g = activeGoal(s)!;
           g.completionClaim = p.summary;
@@ -1293,118 +1250,45 @@ export class GoalRuntime {
         this.auditController = new AbortController();
         const localController = this.auditController;
         const combined = AbortSignal.any([localController.signal, ...(signal ? [signal] : [])]);
-        // Freeze the declared environment for every check in this submission and its audit.
-        const environment = structuredClone(g.verification);
         let audit: Audit | undefined;
-        let environmentIssue: { check: string; hint: string; cleanup?: boolean } | undefined;
-        let verification: VerificationContext | undefined;
+        const workspace = new ReviewWorkspace(ctx.cwd);
         try {
-          if (!this.settings.sandbox)
-            throw new SandboxError(
-              'Configure Docker Sandboxes in personal my-pi-goal.json before verification. No other execution backend is available.',
-            );
-          {
-            update?.(textResult('Preparing frozen inputs for Docker Sandboxes verification.'));
-            verification = await (this.deps.prepareVerification ?? prepareVerification)(
-              ctx.cwd,
-              structuredClone(g),
-              structuredClone(this.settings.sandbox),
-              join(this.deps.agentDir ?? getAgentDir(), 'goal-sandboxes'),
-              combined,
-            );
-            this.current(fence, ['verifying']);
-            this.write('verification.snapshot', (s) => {
-              activeGoal(s)!.notes.push(
-                `Verification ${verification!.identity.snapshotDigest}: ${verification!.manifest.entries.length} input entries; exclusions: ${verification!.manifest.excluded.join(', ').slice(0, 1500) || 'none'}`,
+          update?.(
+            textResult(
+              'The temporary read-only reviewer is inspecting artifacts and main-session execution records.',
+            ),
+          );
+          audit = await (this.deps.audit ?? runIndependentAudit)(
+            structuredClone(g),
+            p.summary,
+            ctx,
+            this.settings,
+            combined,
+            (message) => update?.(textResult(message)),
+            workspace,
+          );
+          audit.workspaceStamp = stamp;
+          if (audit.verdict === 'pass') {
+            await workspace.assertCurrent(combined);
+            if ((await this.sourceStamp(ctx, combined)) !== stamp)
+              throw new ReviewChangedError(
+                'Workspace changed during review; rerun checks and resubmit',
               );
-              activeGoal(s)!.notes = activeGoal(s)!.notes.slice(-40);
-            });
-          }
-          for (const check of g.checks) {
-            update?.(
-              textResult(`Running check ${check.id} in the declared sandbox: ${check.command}`),
-            );
-            let result;
-            try {
-              result = await verification!.check(check, combined);
-            } catch (error) {
-              if (!(error instanceof EnvironmentError) && !(error instanceof SandboxError))
-                throw error;
-              environmentIssue = {
-                check: check.id,
-                hint: String(error),
-                cleanup: error instanceof SandboxError && error.kind === 'cleanup',
-              };
-              break;
-            }
-            this.current(fence, ['verifying']);
-            this.write('check.result', (s) => {
-              const target = activeGoal(s)!;
-              target.checks.find((c) => c.id === check.id)!.last = result;
-            });
-            if (result.exitCode !== 0) {
-              if (result.failure === 'environment') {
-                environmentIssue = {
-                  check: check.id,
-                  hint: result.hint ?? result.output.slice(-1500),
-                };
-                break;
-              }
-              throw new Error(
-                `Check ${check.id} failed (exit ${result.exitCode}): ${result.output}`,
-              );
-            }
-          }
-          if (!environmentIssue) {
-            this.write('verification.ok', (s) => {
-              activeGoal(s)!.consecutiveEnvironmentFailures = 0;
-            });
-            g = this.current(fence, ['verifying']);
-            update?.(
-              textResult('Checks finished; the independent auditor is inspecting artifacts.'),
-            );
-            audit = await (this.deps.audit ?? runIndependentAudit)(
-              structuredClone(g),
-              p.summary,
-              ctx,
-              this.settings,
-              combined,
-              (message) => update?.(textResult(message)),
-              verification,
-            );
-            if (verification) audit.verification = verification.identity;
           }
         } catch (error) {
-          if (error instanceof SandboxError)
-            environmentIssue = {
-              check: 'preparation',
-              hint: String(error),
-              cleanup: error.kind === 'cleanup',
-            };
-          else
-            audit = {
+          audit = {
+            ...(audit ?? {
               at: now(),
-              verdict: 'error',
-              details: String(error),
-              model: '(check/audit)',
+              model: '(read-only audit)',
               findings: [],
               tokens: 0,
               usageUnknown: false,
-            };
+            }),
+            verdict: 'error',
+            details: String(error),
+            ...(error instanceof ReviewChangedError ? { errorKind: 'input_changed' as const } : {}),
+          };
         } finally {
-          try {
-            await verification?.finish(audit?.verdict === 'pass', combined);
-          } catch (error) {
-            if (error instanceof SandboxError && error.kind === 'check') {
-              if (audit) audit = { ...audit, verdict: 'error', details: String(error) };
-            } else {
-              environmentIssue = {
-                check: 'finalization',
-                hint: String(error),
-                cleanup: error instanceof SandboxError && error.kind === 'cleanup',
-              };
-            }
-          }
           if (this.auditController === localController) this.auditController = undefined;
         }
         // Account even when finalization rejects a previously passing audit.
@@ -1420,57 +1304,6 @@ export class GoalRuntime {
             target.usage.auditTokens += audit!.tokens;
             if (audit!.usageUnknown) target.usage.unknown++;
           });
-        }
-        if (environmentIssue) {
-          try {
-            this.current(fence, ['verifying']);
-          } catch {
-            return textResult(
-              'Goal, session or ownership changed; the environment failure was not applied.',
-              { disposition: 'stale_goal' },
-            );
-          }
-          let stopped = false;
-          try {
-            this.write('verification.environment_failure', (s) => {
-              const goal = activeGoal(s)!;
-              goal.consecutiveEnvironmentFailures++;
-              goal.notes.push(
-                `Verification environment issue at ${environmentIssue!.check}: ${environmentIssue!.hint}`,
-              );
-              goal.notes = goal.notes.slice(-40);
-              if (
-                environmentIssue!.cleanup ||
-                combined.aborted ||
-                goal.consecutiveEnvironmentFailures >= MAX_ENVIRONMENT_FAILURES
-              ) {
-                transition(
-                  goal,
-                  'paused',
-                  environmentIssue!.cleanup
-                    ? `Sandbox cleanup is incomplete; resolve it before resuming. ${environmentIssue!.hint}`
-                    : combined.aborted
-                      ? 'Verification cancelled; waiting to resume'
-                      : `Verification environment failed ${goal.consecutiveEnvironmentFailures} times with unchanged settings; adjust it and resume. ${environmentIssue!.hint}`,
-                );
-                s.queuePaused = true;
-                stopped = true;
-              } else {
-                transition(
-                  goal,
-                  'active',
-                  `Verification environment issue; adjust goal_environment before resubmitting. ${environmentIssue!.hint}`,
-                );
-              }
-            });
-          } catch {
-            return textResult(
-              'Goal, session or ownership changed; the environment failure was not applied.',
-            );
-          }
-          const message = `Verification environment blocked the check (not an implementation failure):\n${environmentIssue.hint}\nCurrent environment: ${verificationSummary(environment)}\nConsecutive environment failures: ${activeGoal(this.state)?.consecutiveEnvironmentFailures ?? 0}. Use goal_environment to change workspace/network/environment variables, then resubmit. Approved checks, criteria and evidence are unchanged.`;
-          this.notify(ctx, message);
-          return { ...textResult(message), ...(stopped ? { terminate: true } : {}) };
         }
         if (!audit) return textResult('Checks did not produce an audit result; read goal_status.');
         // Always account incurred audit cost in the old goal, but never apply a stale verdict.
@@ -1496,15 +1329,20 @@ export class GoalRuntime {
           if (combined.aborted) {
             transition(g, 'paused', 'Audit cancelled; waiting to resume');
             s.queuePaused = true;
+          } else if (reason) {
+            transition(g, 'budget_limited', reason);
+            s.queuePaused = true;
           } else if (audit.verdict === 'pass') {
             transition(g, 'complete', audit.details);
+          } else if (audit.verdict === 'needs_info') {
+            g.auditRequests.push(...(audit.requests ?? []));
+            g.nextStep =
+              'Answer reviewer requests with goal_reply; run any requested approved checks with goal_check, then resubmit.';
+            transition(g, 'active', audit.details);
           } else {
-            if (audit.errorKind !== 'budget') g.consecutiveAuditFailures++;
+            if (!audit.errorKind) g.consecutiveAuditFailures++;
             g.notes.push(`Audit feedback: ${audit.details}`);
-            if (reason) {
-              transition(g, 'budget_limited', reason);
-              s.queuePaused = true;
-            } else if (audit.errorKind === 'budget') {
+            if (audit.errorKind === 'budget') {
               transition(
                 g,
                 'blocked',
@@ -1525,7 +1363,7 @@ export class GoalRuntime {
         const status = activeGoal(this.state)!.status;
         return {
           ...textResult(
-            `Audit ${audit.verdict}: ${audit.details}\nCurrent status: ${status}`,
+            `Audit ${audit.verdict}: ${audit.details}\n${audit.requests?.length ? JSON.stringify(audit.requests) + '\nReply using goal_reply, then resubmit.\n' : ''}Current status: ${status}`,
             audit,
           ),
           ...(['blocked', 'paused', 'budget_limited'].includes(status) ? { terminate: true } : {}),
@@ -1537,55 +1375,6 @@ export class GoalRuntime {
     let [cmd = 'status', ...rest] = args.trim().split(/\s+/);
     if (!cmd) cmd = 'status';
     const tail = rest.join(' ');
-    if (cmd === 'sandbox') {
-      if (rest[0] === 'inputs') {
-        if (rest.length > 2 || (rest[1] !== undefined && !/^\d+$/.test(rest[1])))
-          throw new Error('Usage: /goal sandbox inputs [offset]');
-        const report = await inspectInputs(
-          ctx.cwd,
-          this.settings.sandbox ?? { snapshotBytes: 256 * 1024 * 1024, snapshotFiles: 20000 },
-        );
-        this.notify(ctx, JSON.stringify(inputPage(report, Number(rest[1] ?? 0)), null, 2));
-        return;
-      }
-      if (!this.settings.sandbox) {
-        this.notify(
-          ctx,
-          'Docker Sandboxes is not configured. Add sandbox to your personal my-pi-goal.json; see docs/docker-sandboxes-setup.md. Verification is unavailable until configured.',
-        );
-        return;
-      }
-      const backend = new DockerSandboxes(
-        this.settings.sandbox,
-        join(this.deps.agentDir ?? getAgentDir(), 'goal-sandboxes'),
-      );
-      if (tail === 'doctor') {
-        await backend.doctor();
-        this.notify(
-          ctx,
-          'Docker Sandboxes control preflight passed. This does not certify the template or a real check; run the explicit sandbox smoke test.',
-        );
-      } else if (tail === 'cleanup') {
-        this.notify(
-          ctx,
-          `Recovered sandbox leases: ${(await backend.recover()).join(', ') || 'none'}`,
-        );
-      } else if (tail === 'status' || !tail) {
-        this.notify(
-          ctx,
-          JSON.stringify(
-            {
-              backend: 'docker-sandboxes',
-              experimental: true,
-              leases: await backend.leases.list(),
-            },
-            null,
-            2,
-          ),
-        );
-      } else throw new Error('Usage: /goal sandbox doctor|status|cleanup|inputs [offset]');
-      return;
-    }
     if (cmd === 'help') {
       this.notify(ctx, tail === 'more' ? `${HELP}\n\n${MORE_HELP}` : HELP);
       return;
@@ -1914,7 +1703,7 @@ const HELP = `/goal                       Show session goals and queue
 
 Send requirements or changes as normal messages. Ownership is automatic.
 /goal help more             Panel, skipping goals and optional settings`;
-const MORE_HELP = `Verification: /goal sandbox inputs [offset] | doctor | status | cleanup
+const MORE_HELP = `Verification: main-session goal_check, read-only goal_submit, reviewer replies with goal_reply
 Display: /goal panel [show|hide|compact|expand] (no argument toggles visibility)
 Skip: /goal skip [id] (history retained; resume to continue the queue)
 Select: /goal approve [id] or /goal resume [id]

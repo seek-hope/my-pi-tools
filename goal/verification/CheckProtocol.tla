@@ -1,12 +1,12 @@
 ------------------------- MODULE CheckProtocol -------------------------
 EXTENDS Naturals
-CONSTANTS UnsandboxedFallback, IgnoreCancellation, IgnoreIdentity, SkipFailedCheck
+CONSTANTS TrustMissingMetadata, IgnoreCancellation, IgnoreIdentity, SkipFailedCheck
 VARIABLES available, stage, cancelled, epoch, ticket, exitOK, applied, safe
 vars == <<available, stage, cancelled, epoch, ticket, exitOK, applied, safe>>
 Init == /\ available \in BOOLEAN /\ stage = "idle" /\ cancelled = FALSE
         /\ epoch = 1 /\ ticket = 0 /\ exitOK = FALSE /\ applied = FALSE /\ safe = TRUE
 Start == /\ stage = "idle" /\ ~cancelled
-         /\ stage' = IF available \/ UnsandboxedFallback THEN "running" ELSE "error"
+         /\ stage' = IF available \/ TrustMissingMetadata THEN "running" ELSE "error"
          /\ ticket' = epoch
          /\ safe' = (safe /\ (stage' # "running" \/ available))
          /\ UNCHANGED <<available, cancelled, epoch, exitOK, applied>>

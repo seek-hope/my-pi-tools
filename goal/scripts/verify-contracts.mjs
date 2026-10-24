@@ -26,13 +26,7 @@ import { renderGoalWidget, goalStatusText } from '../src/tui.ts';
 import { GoalRuntime, parseBudget } from '../src/runtime.ts';
 import { supportedPi, assertSupportedPi } from '../src/compatibility.ts';
 import { diffState, applyStatePatch } from '../src/store.ts';
-import {
-  DEFAULT_VERIFICATION,
-  environmentSignature,
-  normalizeVerification,
-  verificationKey,
-  verificationSummary,
-} from '../src/checks.ts';
+import { checkProblems, checkResult } from '../src/checks.ts';
 import { visibleWidth, stripTerminalSequences } from '@earendil-works/pi-tui';
 
 const bools = [false, true];
@@ -556,114 +550,60 @@ group(
   },
 );
 group(
-  'environment',
-  'Workspace {readonly,ephemeral} x network {isolated,open} x env sets with duplicates; invalid configs; failure signatures.',
+  'main-checks',
+  'Exit codes null/0/1 x error flag x main-session/legacy provenance x matching/stale generation x matching/stale source stamp x present/missing tool ID x stable/changed inputs x approved/rewritten/missing executed command.',
   (check) => {
-    const cwd = process.cwd();
-    const workspaces = ['readonly', 'ephemeral'];
-    const networks = ['isolated', 'open'];
-    const envSets = [[], ['PATH'], ['B', 'A'], ['PATH', 'PATH']];
-    for (const [workspace, network, env] of product([workspaces, networks, envSets])) {
-      const config = { workspace, network, env };
-      const normalized = normalizeVerification(config);
+    for (const [code, failed, source, generation, stamp, id, stable, command] of product([
+      [null, 0, 1],
+      bools,
+      bools,
+      [1, 2],
+      ['current', 'old'],
+      bools,
+      bools,
+      ['npm test', 'true', undefined],
+    ])) {
+      const goal = makeGoal('Check the result');
+      goal.checks = [{ id: 'K1', command: 'npm test' }];
+      const result = checkResult(
+        goal,
+        goal.checks[0],
+        {
+          toolCall: { id: 'real-call', name: 'bash', arguments: { command: 'npm test' } },
+          isError: failed,
+          result: {
+            content: [{ type: 'text', text: '{"exit_code":0}' }],
+            structuredContent: { exit_code: code },
+          },
+        },
+        stamp,
+        command,
+        stable ? stamp : 'changed',
+      );
+      result.source = source ? 'main-session' : undefined;
+      result.generation = generation;
+      result.toolCallId = id ? 'real-call' : undefined;
+      goal.checks[0].last = result;
       check(
-        normalized.workspace === workspace && normalized.network === network,
-        'declared workspace and network are preserved',
+        result.success === (!failed && code === 0 && stable && command === 'npm test'),
+        'only the actual approved command with stable inputs can pass',
       );
       check(
-        JSON.stringify(normalized.env) === JSON.stringify([...new Set(env)]),
-        'environment names are deduplicated in declaration order',
+        (checkProblems(goal, 'current').length === 0) ===
+          (!failed &&
+            code === 0 &&
+            source &&
+            generation === 1 &&
+            stamp === 'current' &&
+            id &&
+            stable &&
+            command === 'npm test'),
+        'only current successful main-session receipts satisfy checks',
       );
-      check(
-        verificationKey(config) === verificationKey({ ...config, env: [...env].reverse() }),
-        'environment identity ignores variable order',
-      );
-      const summary = verificationSummary(config);
-      check(
-        summary.includes(network === 'open' ? 'open via HTTP/HTTPS proxy' : 'isolated network'),
-        'summary states network capability',
-      );
-      check(
-        summary.includes(workspace === 'readonly' ? 'read-only' : 'ephemeral'),
-        'summary states workspace capability',
-      );
-      check(summary.includes('host filesystem: not mounted'), 'host filesystem is never exposed');
     }
-    check(
-      JSON.stringify(normalizeVerification(undefined)) ===
-        JSON.stringify({ ...DEFAULT_VERIFICATION, workspace: 'readonly' }),
-      'missing configuration means read-only and isolated',
-    );
-    for (const value of [
-      'readonly',
-      [],
-      { workspace: 'rw' },
-      { network: 'offline' },
-      { env: ['1BAD'] },
-      { env: Array.from({ length: 33 }, () => 'PATH') },
-      { extra: true },
-    ])
-      check(
-        !accepts(() => normalizeVerification(value)),
-        'invalid environment configuration is rejected',
-      );
-    const explicit = normalizeVerification({ variables: { TZ: 'UTC', CI: '1' } });
-    check(
-      makeGoal('Build').verification.workspace === 'ephemeral',
-      'new goals use disposable writable copies',
-    );
-    check(
-      verificationKey(explicit) ===
-        verificationKey({ ...explicit, variables: { CI: '1', TZ: 'UTC' } }),
-      'explicit variable identity ignores declaration order',
-    );
-    check(
-      verificationKey(explicit) !== verificationKey({ ...explicit, variables: { CI: '0' } }),
-      'explicit values are bound into verification identity',
-    );
-    for (const name of ['HTTP_PROXY', 'PATH', 'HOME', 'OPENAI_API_KEY', 'BASH_ENV'])
-      check(
-        !accepts(() => normalizeVerification({ variables: { [name]: 'unsafe' } })),
-        'reserved and credential variables are rejected',
-      );
-    const networkPattern = 'Could not resolve host: example.com';
-    check(
-      Boolean(environmentSignature(networkPattern, DEFAULT_VERIFICATION, 6)),
-      'isolated network is suggested for a network failure',
-    );
-    check(
-      !environmentSignature(networkPattern, { ...DEFAULT_VERIFICATION, network: 'open' }, 6),
-      'no network advice when open egress is already declared',
-    );
-    const readonlyPattern = 'cannot create output: Read-only file system';
-    check(
-      Boolean(
-        environmentSignature(
-          readonlyPattern,
-          { ...DEFAULT_VERIFICATION, workspace: 'readonly' },
-          1,
-        ),
-      ),
-      'ephemeral workspace is suggested for a read-only failure',
-    );
-    check(
-      !environmentSignature(
-        readonlyPattern,
-        { ...DEFAULT_VERIFICATION, workspace: 'ephemeral' },
-        1,
-      ),
-      'no workspace advice when writes are already enabled',
-    );
-    check(
-      Boolean(environmentSignature('cc: command not found', DEFAULT_VERIFICATION, 127)),
-      'missing tooling is reported as environmental',
-    );
-    check(
-      !environmentSignature('2 tests failed', DEFAULT_VERIFICATION, 1),
-      'ordinary assertion failures are not classified as environmental',
-    );
   },
 );
+
 group(
   'storage',
   'Nested state mutations, append-only evidence, object/array removal, equal snapshots and invalid patches.',

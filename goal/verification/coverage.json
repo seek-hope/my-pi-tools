@@ -188,24 +188,27 @@
   },
   {
     "id": "checks",
-    "behavior": "Declared per-goal verification environment (read-only/ephemeral workspace, isolated/allowlist/open proxy egress), frozen snapshots, fail-closed sandboxing, cancellation/identity gates and environment-vs-implementation failure classification",
+    "behavior": "Main-session check receipts, source freshness, read-only review requests and replies, current-generation gates and requests excluded from repair accounting",
     "sources": [
       "src/checks.ts",
-      "src/runtime.ts"
+      "src/runtime.ts",
+      "src/review-workspace.ts"
     ],
     "models": [
       "CheckProtocol",
       "VerificationProtocol"
     ],
     "contracts": [
-      "environment"
+      "main-checks"
     ],
     "tests": [
       "test/runtime.test.mjs",
       "test/host-cancellation.test.mjs",
-      "test/checks-env.test.mjs"
+      "test/host-lifecycle.test.mjs",
+      "test/read-only-review.test.mjs",
+      "test/auditor.test.mjs"
     ],
-    "boundary": "MicroVMs, private Docker engines, proxy enforcement and process delivery remain integration assumptions. Failure classification is a conservative heuristic that never converts a failed check into a pass; environment advice does not prove the failure was environmental."
+    "boundary": "Host bash and permission hooks are trusted. Workspace stamps are metadata freshness markers with documented generated/control exclusions, not immutable snapshots. Reviewed text/listings are rechecked. Models abstract filesystem stability and do not prove model judgment or OS isolation."
   },
   {
     "id": "inspection",
@@ -263,16 +266,6 @@
       "test/approval.test.mjs"
     ],
     "boundary": "Host width utilities and tested terminal semantics assumed; no pixel, color-contrast or full accessibility proof."
-  },
-  {
-    "id": "docker-sandboxes",
-    "behavior": "Docker Sandboxes verification backend, source-v2 selection with project-bound fixture/hardlink exceptions, internal links, explicit non-secret variables, private runner, cancellation cleanup and lease recovery",
-    "sources": ["src/verification/contract.ts", "src/verification/snapshot.ts", "src/verification/process.ts", "src/verification/leases.ts", "src/verification/docker-sandboxes.ts", "src/verification/pipeline.ts", "src/verification/runner.mjs", "src/verification/proxy.mjs", "src/verification/watchdog.ts", "src/verification/watchdog.mjs"],
-    "models": [],
-    "contracts": [],
-    "tests": ["test/docker-sandboxes.test.mjs", "test/verification-snapshot.test.mjs", "test/sandbox-watchdog.test.mjs", "test/sandbox-network.test.mjs", "test/runtime.test.mjs", "test/auditor.test.mjs"],
-    "boundary": "Unit, proxy and fake CLI regressions plus a separately recorded real microVM acceptance suite. No formal composition proof: sbx, Docker, image integrity, filesystem stability, upstream DNS/policies, process delivery and watchdog survival remain external assumptions. See docs/docker-sandboxes-acceptance.md for the bounded tested cases.",
-    "exclusion": true
   },
   {
     "id": "external",

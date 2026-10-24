@@ -12,7 +12,6 @@ import {
   SettingsManager,
 } from '@earendil-works/pi-coding-agent';
 import { GoalRuntime } from '../src/runtime.ts';
-import { testSandbox, verificationFixture } from './sandbox-fixtures.mjs';
 import { activeGoal } from '../src/state.ts';
 import { WORK_RULES } from '../src/prompts.ts';
 
@@ -198,6 +197,8 @@ for (const { queuedInput, commandStart } of [
                   evidence: 'result.txt:1 contains complete',
                 }),
               ];
+            else if (!g.checks[0]?.last?.success)
+              content = [toolCall('goal_check', { ...key, check_id: 'K1' })];
             else if (!deliberatelyStopped) {
               deliberatelyStopped = true;
               content = [{ type: 'text', text: 'I have stopped early.' }];
@@ -267,11 +268,8 @@ for (const { queuedInput, commandStart } of [
         noContextFiles: true,
         extensionFactories: [
           (pi) => {
-            runtime = new GoalRuntime(pi, { agentDir, prepareVerification: verificationFixture() });
+            runtime = new GoalRuntime(pi, { agentDir });
             runtime.register();
-            pi.on('session_start', () => {
-              runtime.settings.sandbox = structuredClone(testSandbox);
-            });
             pi.on('before_agent_start', (event, ctx) => {
               starts.push({
                 messageType: event.messageType,
@@ -308,6 +306,7 @@ for (const { queuedInput, commandStart } of [
           'goal_resume',
           'goal_plan',
           'goal_progress',
+          'goal_check',
           'goal_wait',
           'goal_submit',
         ],

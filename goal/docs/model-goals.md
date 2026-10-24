@@ -9,8 +9,9 @@ The model can manage a goal from ordinary conversation. Goal tools are available
 | `goal_create` | Pass `session_id`, `expected_revision` and `objective`. Creates only when no unfinished goal exists, returns its ID/generation and planning instructions. A cancelled, stale-revision or foreign-session request cannot create a goal. |
 | `goal_plan` | Pass goal ID/generation and the complete objective, kind, criteria, tasks and checks. An eligible simple goal can accept its first plan automatically. All changes to an approved specification become pending proposals requiring user approval, including task changes. |
 | `goal_resume` | Pass goal ID/generation. Resume approved stopped work for the user's current request after blockers are resolved. Pending approval, exhausted cumulative budget, another selected goal and an earlier queue head remain barriers. |
-| `goal_environment` | Declare the runtime environment for approved checks: `workspace` (`readonly`/`ephemeral`), `network` (`isolated`/`allowlist`/`open`) and DNS `allow`/`deny` lists. Host `env` forwarding is unsupported and must remain empty. This is not a specification change, so it needs no `/goal approve`; explicit network permissions bind the exact policy. A control preflight checks sbx availability before applying it; actual VM provisioning happens during submission. See [verification environments](verification-environment.md). |
-| `goal_progress` / `goal_submit` | Record claimed evidence and submit for approved mechanical checks plus independent audit. Creating or resuming a goal never bypasses completion verification. |
+| `goal_check` | Pass goal ID/generation and an approved `check_id`. Execute through main-session bash and record real exit metadata/output with source freshness. Existing host permissions apply. |
+| `goal_reply` | Pass goal ID/generation, current `request_id` and a concrete answer. Records executor evidence; resubmit for a fresh read-only review. |
+| `goal_progress` / `goal_submit` | Record claimed evidence and submit for independent read-only review after current check records exist. `goal_submit` does not execute commands. A reviewer can yield an information request; no completion while current requests are unanswered. |
 
 ## Ordinary conversation
 

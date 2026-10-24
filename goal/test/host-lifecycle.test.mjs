@@ -13,7 +13,6 @@ import {
   VERSION,
 } from '@earendil-works/pi-coding-agent';
 import { GoalRuntime } from '../src/runtime.ts';
-import { testSandbox, verificationFixture } from './sandbox-fixtures.mjs';
 import { activeGoal } from '../src/state.ts';
 
 for (const reopen of [false, true])
@@ -81,18 +80,23 @@ for (const reopen of [false, true])
           if (isAudit) {
             auditCalls++;
             content =
-              auditCalls === 1
-                ? call('audit_read', { path: 'result.txt' })
-                : call('audit_result', {
-                    details: 'Read the approved result',
-                    findings: [
-                      {
-                        criterionId: 'C1',
-                        passed: true,
-                        evidence: 'result.txt:1 contains complete',
-                      },
-                    ],
-                  });
+              reopen && auditCalls === 1
+                ? call('audit_request', {
+                    criterionId: 'C1',
+                    question: 'Which artifact contains the exact result?',
+                  })
+                : auditCalls === (reopen ? 2 : 1)
+                  ? call('audit_read', { path: 'result.txt' })
+                  : call('audit_result', {
+                      details: 'Read the approved result',
+                      findings: [
+                        {
+                          criterionId: 'C1',
+                          passed: true,
+                          evidence: 'result.txt:1 contains complete',
+                        },
+                      ],
+                    });
           } else if (!g)
             content = call('goal_create', {
               session_id: runtime.state.sessionId,
@@ -123,6 +127,12 @@ for (const reopen of [false, true])
               next_step: 'Audit',
               criterion_id: 'C1',
               evidence: 'result.txt:1 contains complete',
+            });
+          else if (g.auditRequests.some((r) => r.generation === g.generation && !r.answer))
+            content = call('goal_reply', {
+              ...key,
+              request_id: g.auditRequests.find((r) => !r.answer).id,
+              answer: 'Inspect result.txt:1 for the exact complete text.',
             });
           else content = call('goal_submit', { ...key, summary: 'Check the approved fixture' });
           const message = {
@@ -164,11 +174,8 @@ for (const reopen of [false, true])
         noContextFiles: true,
         extensionFactories: [
           (pi) => {
-            runtime = new GoalRuntime(pi, { agentDir, prepareVerification: verificationFixture() });
+            runtime = new GoalRuntime(pi, { agentDir });
             runtime.register();
-            pi.on('session_start', () => {
-              runtime.settings.sandbox = structuredClone(testSandbox);
-            });
             pi.on('tool_execution_end', (event) => toolEnds.push(event));
           },
         ],
@@ -180,6 +187,7 @@ for (const reopen of [false, true])
         'goal_plan',
         'goal_wait',
         'goal_progress',
+        'goal_reply',
         'goal_submit',
       ];
       const open = async (sessionManager, tools = goalTools) => {
@@ -260,7 +268,13 @@ for (const reopen of [false, true])
       await run('The fixture is available. Resume the approved goal and finish.');
       assert.equal(activeGoal(runtime.state).status, 'complete');
       assert.equal(runtime.state.owner, null);
-      assert.equal(auditCalls, 2);
+      assert.equal(auditCalls, reopen ? 3 : 2);
+      if (reopen) {
+        assert.equal(activeGoal(runtime.state).auditRequests.length, 1);
+        assert.match(activeGoal(runtime.state).auditRequests[0].answer.text, /result.txt/);
+        assert.equal(activeGoal(runtime.state).consecutiveAuditFailures, 0);
+        assert.equal(toolEnds.filter((e) => e.toolName === 'goal_reply').length, 1);
+      }
       assert.ok(
         toolEnds
           .filter((e) => e.toolName === 'goal_resume')

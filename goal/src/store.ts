@@ -25,7 +25,6 @@ import {
   type Owner,
   type ProjectState,
 } from './state.ts';
-import { normalizeVerification } from './checks.ts';
 
 export type StatePath = (string | number)[];
 /** Compact journal update: explicit sets and removals instead of a full state copy. */
@@ -135,6 +134,10 @@ export function applyStatePatch(state: ProjectState, patch: StatePatch): Project
   for (const [path, value] of patch.set) assignAt(next, path, structuredClone(value));
   return next;
 }
+type GoalWithLegacyEnvironment = ProjectState['goals'][number] & {
+  verification?: unknown;
+  consecutiveEnvironmentFailures?: unknown;
+};
 /** Project a loaded or just-mutated state into the current schema in place. */
 function normalizeState(state: ProjectState) {
   for (const goal of state.goals) {
@@ -149,8 +152,10 @@ function normalizeState(state: ProjectState) {
       command,
       ...(last ? { last } : {}),
     }));
-    goal.verification = normalizeVerification(goal.verification);
-    goal.consecutiveEnvironmentFailures ??= 0;
+    goal.auditRequests ??= [];
+    // Retired runtime settings are ignored in current projections; journal bytes remain intact.
+    delete (goal as GoalWithLegacyEnvironment).verification;
+    delete (goal as GoalWithLegacyEnvironment).consecutiveEnvironmentFailures;
     if (goal.pendingSpec)
       goal.pendingSpec.checks = goal.pendingSpec.checks.map(({ command }) => ({ command }));
   }

@@ -13,7 +13,6 @@ import {
   VERSION,
 } from '@earendil-works/pi-coding-agent';
 import { GoalRuntime } from '../src/runtime.ts';
-import { testSandbox, verificationFixture } from './sandbox-fixtures.mjs';
 import { activeGoal } from '../src/state.ts';
 
 const [major, minor] = VERSION.split('.').map(Number);
@@ -168,11 +167,8 @@ for (const [phase, clear] of [
         noContextFiles: true,
         extensionFactories: [
           (pi) => {
-            runtime = new GoalRuntime(pi, { agentDir, prepareVerification: verificationFixture() });
+            runtime = new GoalRuntime(pi, { agentDir });
             runtime.register();
-            pi.on('session_start', () => {
-              runtime.settings.sandbox = structuredClone(testSandbox);
-            });
             pi.on('agent_settled', (event) => extensionSettled.push(event));
           },
         ],

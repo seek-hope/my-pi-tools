@@ -4,7 +4,7 @@ The executor receives request-local control messages assembled from the current 
 
 ## Executor projection
 
-Every request gets `sessionContext`: session identity, revision, selected goal, queue state and lifecycle guidance, including explicit empty state after manual or automatic clearing. An owned unfinished selected goal gets one current `goalContext` containing its full objective, criteria, tasks and supplements, indexed evidence counts/previews, and the declared verification environment, with the existing bounded check-output/notes views. `goal_evidence` pages a criterion or task record by ID; the default `goal_status` view uses the same compact evidence index and accepts `view: "full"` when the complete projection is needed. Historic snapshots in control messages are removed from the request projection.
+Every request gets `sessionContext`: current identity, revision, selection, queue and lifecycle guidance, including empty state after clearing. An owned unfinished goal gets one fresh `goalContext` with its contract, supplements, evidence indexes, main-session check records and current reviewer requests. `goal_evidence` pages records, and `goal_status` supports compact or full views. Old generated control snapshots are removed from the request projection.
 
 Exactly one fresh `WORK_RULES` control message is generated when this runtime owns unfinished selected work or a valid nonselected planning request. The rules are rebuilt even after compaction; they are not copied into kickoff, continuation or lifecycle-tool return instructions. This guarantee concerns plugin-generated control messages, not text quoted in ordinary conversation or preserved historical tool results. No rules are generated for an empty, completed or unowned session without eligible planning work.
 
@@ -14,9 +14,9 @@ Startup and continuation messages trigger the host lifecycle but do not accumula
 
 ## Independent audit
 
-The auditor runs in a fresh context with a read-only system prompt and `auditPrompt` containing the complete approved contract and evidence indexes. `audit_read` and `audit_search` inspect actual artifacts; `audit_check` reruns approved checks in the goal's frozen verification environment. `audit_list` only navigates directories. `audit_record` retrieves frozen executor evidence and recorded check output. Listing directories or reading those records alone does not satisfy the inspection gate.
+The reviewer runs in a fresh temporary context with the complete approved contract and evidence indexes. `audit_read` and `audit_search` inspect artifacts; `audit_list` navigates; `audit_record` pages executor evidence, actual main-session check outputs and replies. `audit_request` yields a question to the main session, which answers with `goal_reply` and resubmits. No execution, mutation, MCP or inherited extension tool is exposed.
 
-The auditor must receive and review an artifact inspection or approved-check result before calling `audit_result` in a later model response. A verdict alongside the first inspection is rejected. Findings must cover every criterion exactly once; missing or contradictory evidence fails. These requirements are in both the instructions/tool descriptions and the existing runtime checks. An environment that prevents a check from running is never evidence of success. Optional polish does not expand the approved contract.
+The reviewer must receive and review an artifact read/search result before `audit_result` in a later response. Listing directories, reading records and reading replies do not satisfy inspection. Questions cannot accompany a passing verdict, and all criteria require one finding. Missing information can yield `needs_info` without consuming repair attempts. Claims, answers and file contents are treated as data; optional polish cannot expand the approved contract.
 
 ## Stagnation diagnosis
 
