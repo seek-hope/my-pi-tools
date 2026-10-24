@@ -1,5 +1,5 @@
 /**
- * HTTP transport for the DeepSeek Search & Fetch API.
+ * HTTP transport shared by the DeepSeek and Exa APIs.
  *
  * Responsibilities:
  * - per-attempt timeout, linked to the caller's AbortSignal
@@ -318,6 +318,7 @@ export async function postJson<T>(
 			});
 
 			if (response.status >= 300 && response.status < 400) {
+				await response.body?.cancel().catch(() => {});
 				throw new WebToolError("http", `unexpected redirect (HTTP ${response.status})`, {
 					status: response.status,
 				});

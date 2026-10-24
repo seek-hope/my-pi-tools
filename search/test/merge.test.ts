@@ -69,6 +69,24 @@ test("mergeSearchOutcomes respects the result limit and cache state", () => {
 	assert.equal(merged.source, "cache");
 });
 
+test("canonicalResultUrl preserves trailing slashes in query values", () => {
+	assert.notEqual(canonicalResultUrl("https://example.com/?path=/"), canonicalResultUrl("https://example.com/?path="));
+	assert.equal(canonicalResultUrl("https://example.com/path/?x=1#part"), "https://example.com/path?x=1");
+});
+
+test("duplicate URLs from one provider cannot outweigh agreement between providers", () => {
+	const merged = mergeSearchOutcomes([
+		outcome("deepseek", [
+			item({ url: "https://duplicate.example/" }),
+			item({ url: "https://duplicate.example/#part" }),
+			item({ url: "https://shared.example/" }),
+		]),
+		outcome("exa", [item({ url: "https://shared.example/" })]),
+	], 10);
+	assert.equal(merged.results[0]!.url, "https://shared.example/");
+	assert.equal(merged.results.length, 2);
+});
+
 test("canonicalResultUrl removes fragments and trailing slashes", () => {
 	assert.equal(
 		canonicalResultUrl("https://Example.com/path/#section"),

@@ -49,7 +49,6 @@ export interface SearchOutcome {
 	source: CacheSource;
 	durationMs: number;
 	providers?: SearchProvider[];
-	warnings?: string[];
 }
 
 export interface FetchOutcome {
@@ -60,7 +59,6 @@ export interface FetchOutcome {
 	source: CacheSource;
 	durationMs: number;
 	provider?: SearchProvider;
-	warnings?: string[];
 }
 
 export interface DeepSeekClientOptions {

@@ -11,33 +11,25 @@ Pi 扩展：把 **DeepSeek Search & Fetch API** 与 **Exa Search & Contents API*
 
 ## 安装
 
-方式一：作为本地 Pi 包安装（推荐，设置会写入 Pi 配置）：
+在 `my-pi-tools` 根目录安装本地包：
 
 ```bash
-pi install /absolute/path/to/my-pi-search
+pi install ./search
 ```
 
-方式二：临时试用，不写入配置：
+这会把包路径写入 Pi 个人配置。仅为当前项目安装：
 
 ```bash
-pi -e /absolute/path/to/my-pi-search
+pi install -l /absolute/path/to/my-pi-tools/search
 ```
 
-方式三：在项目里使用。把本目录放到项目的 `.pi/` 下并在 `.pi/settings.json` 声明：
-
-```json
-{
-  "packages": ["../my-pi-search"]
-}
-```
-
-方式四：直接加载入口文件：
+临时加载入口文件，不写入配置：
 
 ```bash
-pi -e /absolute/path/to/my-pi-search/src/index.ts
+pi -e /absolute/path/to/my-pi-tools/search/src/index.ts
 ```
 
-> 注意：Pi 也支持 `~/.pi/agent/extensions/*/index.ts` 目录扩展；本扩展是多文件 TypeScript 模块，建议使用上面的包方式，不要只复制 `index.ts`。
+本扩展是多文件 TypeScript 模块，不要只复制 `index.ts`。在已经运行的 Pi 中安装后执行 `/reload`。支持的 Pi peer 版本为 **1.3.0 或 1.4.0**。
 
 ## 配置
 

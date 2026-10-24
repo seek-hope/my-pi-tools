@@ -7,7 +7,7 @@
  */
 
 import { randomBytes } from "node:crypto";
-import { chmod, mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -43,9 +43,9 @@ export function cutToBytes(text: string, maxBytes: number): string {
 	if (maxBytes <= 0) return "";
 	if (byteLength(text) <= maxBytes) return text;
 	const buffer = Buffer.from(text, "utf8");
-	let out = buffer.subarray(0, maxBytes).toString("utf8");
-	// A multi-byte character cut in half decodes to one or more U+FFFD.
-	out = out.replace(/\uFFFD+$/u, "");
+	let end = Math.floor(maxBytes);
+	while (end > 0 && (buffer[end]! & 0xc0) === 0x80) end -= 1;
+	let out = buffer.subarray(0, end).toString("utf8");
 	const newline = out.lastIndexOf("\n");
 	if (newline > 0 && newline >= maxBytes * 0.5) {
 		out = out.slice(0, newline);
@@ -94,6 +94,13 @@ export interface SpillCleanupOptions {
 	maxFiles?: number;
 }
 
+async function assertSpillDirectory(dir: string): Promise<void> {
+	const info = await lstat(dir);
+	if (!info.isDirectory() || (process.getuid && info.uid !== process.getuid())) {
+		throw new Error("Unsafe spill directory: expected a real directory owned by the current user");
+	}
+}
+
 /** Remove expired spill files and cap the directory; failures are best-effort. */
 export async function cleanupSpillFiles(options: SpillCleanupOptions = {}): Promise<void> {
 	const dir = options.dir ?? join(tmpdir(), SPILL_DIR_NAME);
@@ -101,6 +108,7 @@ export async function cleanupSpillFiles(options: SpillCleanupOptions = {}): Prom
 	const maxAgeMs = options.maxAgeMs ?? SPILL_MAX_AGE_MS;
 	const maxFiles = Math.max(0, options.maxFiles ?? SPILL_MAX_FILES);
 	try {
+		await assertSpillDirectory(dir);
 		const entries = await readdir(dir, { withFileTypes: true });
 		const files: Array<{ path: string; mtimeMs: number }> = [];
 		for (const entry of entries) {
@@ -120,7 +128,7 @@ export async function cleanupSpillFiles(options: SpillCleanupOptions = {}): Prom
 		files.sort((a, b) => b.mtimeMs - a.mtimeMs);
 		for (const file of files.slice(maxFiles)) await rm(file.path, { force: true });
 	} catch {
-		// Missing or unreadable spill directory: nothing to clean.
+		// Missing, unreadable or unsafe spill directory: leave it untouched.
 	}
 }
 
@@ -128,8 +136,9 @@ export async function cleanupSpillFiles(options: SpillCleanupOptions = {}): Prom
 export async function spillToTempFile(content: string, prefix = "page"): Promise<string> {
 	const dir = join(tmpdir(), SPILL_DIR_NAME);
 	await mkdir(dir, { recursive: true, mode: 0o700 });
-	// `mode` only applies on creation; repair a pre-existing loose directory.
-	await chmod(dir, 0o700).catch(() => {});
+	await assertSpillDirectory(dir);
+	// `mode` only applies on creation; repair an owned directory before writing.
+	await chmod(dir, 0o700);
 	const now = Date.now();
 	if (now - lastCleanup >= SPILL_CLEANUP_INTERVAL_MS) {
 		lastCleanup = now;

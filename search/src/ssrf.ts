@@ -6,10 +6,10 @@
  * loopback/private/link-local/reserved destinations, cloud metadata hosts,
  * and DNS names that resolve into those ranges.
  *
- * Residual risk: DNS is checked before the request, so a hostile resolver can
- * still rebind between the check and the fetch. Keeping this in the same
- * process as `fetch` (rather than a preflight in another service) keeps the
- * window small; `allowPrivateHosts` exists only for controlled environments.
+ * Residual risk: the local DNS preflight only decides whether to send the URL
+ * to DeepSeek or Exa. Those remote services resolve and fetch it independently;
+ * this guard cannot pin their DNS answers or constrain their redirect handling.
+ * `allowPrivateHosts` exists only for controlled environments.
  */
 
 import { lookup } from "node:dns/promises";

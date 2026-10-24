@@ -322,7 +322,6 @@ test("web_search auto merges both configured providers and deduplicates URLs", a
 	assert.equal(result.isError, undefined);
 	const details = result.details as {
 		providers: string[];
-		warnings: string[];
 		resultCount: number;
 		results: Array<{ title: string; providers: string[] }>;
 	};

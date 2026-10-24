@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm, stat, utimes, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, utimes, writeFile, symlink, mkdir, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -42,6 +42,7 @@ test("cutToBytes never splits a multi-byte code point", () => {
 	const partial = cutToBytes(text, 4); // would split the emoji
 	assert.equal(partial.includes("\uFFFD"), false);
 	assert.ok(Buffer.byteLength(partial, "utf8") <= 4);
+	assert.equal(cutToBytes("a\uFFFDrest", 4), "a\uFFFD", "preserve an actual replacement character at the boundary");
 });
 
 test("oneLine collapses whitespace and clamps length", () => {
@@ -62,6 +63,27 @@ test("spillToTempFile writes private readable content", async () => {
 	assert.equal(written, content);
 	const info = await stat(path);
 	assert.equal(info.mode & 0o077, 0, "file should not be group/world readable");
+});
+
+test("spill writes and cleanup refuse a symlinked directory", async () => {
+	const root = await mkdtemp(join(tmpdir(), "pi-spill-link-test-"));
+	const target = join(root, "unrelated");
+	const link = join(root, "pi-deepseek-web");
+	const previousTmp = process.env.TMPDIR;
+	try {
+		await mkdir(target);
+		await writeFile(join(target, "retain.md"), "unrelated data");
+		await symlink(target, link, "dir");
+		await cleanupSpillFiles({ dir: link, maxFiles: 0 });
+		assert.equal(await readFile(join(target, "retain.md"), "utf8"), "unrelated data");
+		process.env.TMPDIR = root;
+		await assert.rejects(spillToTempFile("must not write outside spill directory"), /unsafe spill directory/i);
+		assert.deepEqual(await readdir(target), ["retain.md"]);
+	} finally {
+		if (previousTmp === undefined) delete process.env.TMPDIR;
+		else process.env.TMPDIR = previousTmp;
+		await rm(root, { recursive: true, force: true });
+	}
 });
 
 test("cleanupSpillFiles removes expired files and caps the directory", async () => {

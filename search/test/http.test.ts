@@ -184,6 +184,16 @@ test("postJson rejects malformed JSON and oversized bodies", async () => {
 	}
 });
 
+test("postJson cancels redirect response bodies instead of leaving streams open", async () => {
+	let cancelled = false;
+	const body = new ReadableStream<Uint8Array>({ cancel() { cancelled = true; } });
+	const error = await rejection(postJson("https://api.example.com/search", {}, options({
+		fetchImpl: async () => new Response(body, { status: 302, headers: { location: "https://other.example.com/" } }),
+	})));
+	assert.equal(error.status, 302);
+	assert.equal(cancelled, true);
+});
+
 test("parseRetryAfter understands seconds, HTTP dates and junk", () => {
 	assert.equal(parseRetryAfter("3"), 3_000);
 	assert.equal(parseRetryAfter(" 0 "), 0);

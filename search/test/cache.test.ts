@@ -64,6 +64,20 @@ test("SharedFetchCache coalesces concurrent misses into one load", async () => {
 	assert.equal(cache.stats.hits, 1);
 });
 
+test("late success from an abandoned request cannot overwrite a retry's cached result", async () => {
+	const cache = new SharedFetchCache<string, string>(new TtlLruCache({ ttlMs: 1000, maxEntries: 10 }));
+	let resolveOld!: (value: string) => void;
+	const controller = new AbortController();
+	const pending = cache.getOrLoad("key", () => new Promise<string>((resolve) => { resolveOld = resolve; }), controller.signal);
+	controller.abort();
+	await assert.rejects(pending, { kind: "aborted" });
+	await cache.getOrLoad("key", async () => "fresh");
+	resolveOld("obsolete");
+	await new Promise((resolve) => setImmediate(resolve));
+	assert.equal((await cache.getOrLoad("key", async () => assert.fail("must use cache"))).value, "fresh");
+	assert.equal(cache.stats.stores, 1);
+});
+
 test("SharedFetchCache does not cache failures", async () => {
 	const cache = new SharedFetchCache<string, string>(
 		new TtlLruCache<string, string>({ ttlMs: 1_000, maxEntries: 10 }),

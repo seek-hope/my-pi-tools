@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Pi extensions: durable goals, DeepSeek web tools, and CodeGraph MCP integration",
+  "description": "Pi extensions: durable goals, DeepSeek and Exa web tools, and CodeGraph MCP integration",
   "engines": {
     "node": ">=22.19.0"
   },

@@ -16,11 +16,10 @@ export interface CacheStats {
 	aborts: number;
 	stores: number;
 	failures: number;
-	evictions: number;
 }
 
 export function createCacheStats(): CacheStats {
-	return { hits: 0, misses: 0, coalesced: 0, aborts: 0, stores: 0, failures: 0, evictions: 0 };
+	return { hits: 0, misses: 0, coalesced: 0, aborts: 0, stores: 0, failures: 0 };
 }
 
 export interface TtlLruOptions {
@@ -39,7 +38,6 @@ export class TtlLruCache<K, V> {
 	private readonly ttlMs: number;
 	private readonly maxEntries: number;
 	private readonly now: () => number;
-	private evictions = 0;
 
 	constructor(options: TtlLruOptions) {
 		this.ttlMs = Math.max(0, options.ttlMs);
@@ -53,10 +51,6 @@ export class TtlLruCache<K, V> {
 
 	get size(): number {
 		return this.entries.size;
-	}
-
-	get evictionCount(): number {
-		return this.evictions;
 	}
 
 	get(key: K): V | undefined {
@@ -81,16 +75,7 @@ export class TtlLruCache<K, V> {
 			const oldest = this.entries.keys().next();
 			if (oldest.done) break;
 			this.entries.delete(oldest.value);
-			this.evictions += 1;
 		}
-	}
-
-	delete(key: K): boolean {
-		return this.entries.delete(key);
-	}
-
-	clear(): void {
-		this.entries.clear();
 	}
 }
 
@@ -187,8 +172,12 @@ export class SharedFetchCache<K, V> {
 				.then(
 					(value) => {
 						record.settled = true;
-						this.stats.stores += 1;
-						this.cache.set(key, value);
+						// A cancelled loader may finish after a retry. Only the current,
+						// live request may publish into the shared cache.
+						if (!controller.signal.aborted && this.inflight.get(key) === record) {
+							this.stats.stores += 1;
+							this.cache.set(key, value);
+						}
 						return value;
 					},
 					(error: unknown) => {

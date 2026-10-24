@@ -15,7 +15,10 @@ export function canonicalResultUrl(raw: string): string {
 	try {
 		const url = new URL(raw);
 		url.hash = "";
-		return url.toString().replace(/\/$/, "");
+		url.pathname = url.pathname.replace(/\/$/, "");
+		const canonical = url.toString();
+		// URL preserves the root slash; never trim a slash belonging to a query value.
+		return url.pathname === "/" && !url.search ? canonical.replace(/\/$/, "") : canonical;
 	} catch {
 		return raw;
 	}
@@ -61,7 +64,7 @@ export function mergeSearchOutcomes(outcomes: SearchOutcome[], limit: number): S
 				return;
 			}
 
-			current.score += points;
+			if (!current.providers.has(provider)) current.score += points;
 			current.providers.add(provider);
 			current.item.providers = uniqueProviders(current.providers);
 			if (!current.item.snippet && result.snippet) current.item.snippet = result.snippet;
@@ -92,7 +95,6 @@ export function mergeSearchOutcomes(outcomes: SearchOutcome[], limit: number): S
 	const allProviders = uniqueProviders(
 		outcomes.flatMap((outcome) => outcome.providers ?? [providerOf(outcome)]),
 	);
-	const warnings = [...new Set(outcomes.flatMap((outcome) => outcome.warnings ?? []))];
 
 	return {
 		results,
@@ -100,6 +102,5 @@ export function mergeSearchOutcomes(outcomes: SearchOutcome[], limit: number): S
 		source: outcomes.every((outcome) => outcome.fromCache) ? "cache" : "network",
 		durationMs: Math.max(...outcomes.map((outcome) => outcome.durationMs)),
 		providers: allProviders,
-		warnings,
 	};
 }
