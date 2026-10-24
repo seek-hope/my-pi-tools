@@ -127,6 +127,25 @@ test("commands serialize and shutdown cancels/awaits an in-flight command", asyn
   assert.equal(h.messages.length, 1, "old contexts must not send messages after shutdown");
 });
 
+test("shutdown cancels commands that are still waiting for the agent to become idle", async () => {
+  const h = harness();
+  let release!: () => void;
+  h.context.waitForIdle = () => new Promise<void>(resolve => { release = resolve; });
+  const command = h.invoke("init");
+  await new Promise(resolve => setImmediate(resolve));
+  let stopped = false;
+  const shutdown = Promise.resolve(h.emit("session_shutdown")).then(() => { stopped = true; });
+  try {
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(stopped, true, "shutdown must not depend on waitForIdle resolving");
+  } finally {
+    release();
+    await Promise.all([command, shutdown]);
+  }
+  assert.equal(h.runs(), 0);
+  assert.equal(h.messages.length, 0);
+});
+
 test("a new session gets a fresh cancellation signal", async () => {
   const h = harness();
   await h.emit("session_shutdown");

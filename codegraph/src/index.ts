@@ -1,4 +1,4 @@
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { loadConfig, projectPath, serverConfig, SERVER_NAME } from "./config.ts";
 import { runCommand, type Runner } from "./runner.ts";
 
@@ -17,6 +17,22 @@ PI_CODEGRAPH_COMMAND_TIMEOUT. See the package README.
 No automatic installation, initialization, or global configuration edits.`;
 
 const GUIDANCE = "For indexed code, use mcp__codegraph's codegraph_explore to retrieve relevant source, call paths and change impact before broad file-by-file exploration. In codemode, discover it with searchTools and read describeNamespace('mcp__codegraph') for server instructions. If the project is unindexed or CodeGraph is unavailable, fall back to built-in tools; do not initialize without user authorization. Check stale-source warnings and verify affected files directly when needed; the graph does not replace tests.";
+
+function waitForIdle(ctx: ExtensionCommandContext, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const cleanup = () => signal.removeEventListener("abort", abort);
+    const abort = () => { cleanup(); reject(signal.reason); };
+    if (signal.aborted) { abort(); return; }
+    signal.addEventListener("abort", abort, { once: true });
+    Promise.resolve().then(() => {
+      signal.throwIfAborted();
+      return ctx.waitForIdle();
+    }).then(
+      () => { cleanup(); resolve(); },
+      error => { cleanup(); reject(error); },
+    );
+  });
+}
 
 export function registerCodegraph(
   pi: ExtensionAPI,
@@ -76,7 +92,7 @@ export function registerCodegraph(
       const cwd = projectPath(config, ctx.cwd);
       pending = (async () => {
         try {
-          if (action === "init" || action === "sync") await ctx.waitForIdle();
+          if (action === "init" || action === "sync") await waitForIdle(ctx, signal);
           signal.throwIfAborted();
           if (ctx.hasUI) ctx.ui.notify(`CodeGraph ${action}: ${cwd}`, "info");
           const cliArgs = action === "doctor" ? ["--version"]
