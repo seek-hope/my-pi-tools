@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, symlink, link, rm } from 'node:fs/promises';
+import fsPromises, { mkdtemp, mkdir, writeFile, symlink, link, rm } from 'node:fs/promises';
+import { syncBuiltinESMExports } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { workspaceStamp, ReviewWorkspace, ReviewChangedError } from '../src/review-workspace.ts';
@@ -57,6 +58,33 @@ test('generated-directory exclusions do not hide ordinary source files named bui
   await writeFile(join(cwd, 'build'), '#!/bin/sh\nexit 1\n');
   assert.notEqual(await workspaceStamp(cwd), stamp);
 });
+test('review rejects invalid UTF-8 instead of conflating distinct binary byte sequences', async (t) => {
+  const cwd = await fixture(t);
+  await writeFile(join(cwd, 'invalid.txt'), Buffer.from([0xff, 0xfe]));
+  await assert.rejects(new ReviewWorkspace(cwd).read('invalid.txt'), /UTF-8|binary/);
+});
+test('review bounds file bytes even when a file grows after initial metadata inspection', async (t) => {
+  const cwd = await fixture(t),
+    target = join(cwd, 'result.txt');
+  const lstat = fsPromises.lstat;
+  const mock = t.mock.method(fsPromises, 'lstat', async (...args) => {
+    const info = await lstat(...args);
+    if (args[0] === target) await writeFile(target, Buffer.alloc(5000001, 65));
+    return info;
+  });
+  syncBuiltinESMExports();
+  t.after(() => {
+    mock.mock.restore();
+    syncBuiltinESMExports();
+  });
+  await assert.rejects(new ReviewWorkspace(cwd).read('result.txt'), /5 MB/);
+});
+test('the full text at the file size limit remains reviewable', async (t) => {
+  const cwd = await fixture(t);
+  await writeFile(join(cwd, 'result.txt'), Buffer.alloc(5000000, 65));
+  assert.equal((await new ReviewWorkspace(cwd).read('result.txt')).length, 5000000);
+});
+
 test('read-only inspection rejects escapes, notices deleted artifacts and invalidates directory listings', async (t) => {
   const cwd = await fixture(t);
   await symlink(tmpdir(), join(cwd, 'escape'));

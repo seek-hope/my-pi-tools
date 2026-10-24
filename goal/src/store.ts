@@ -400,8 +400,11 @@ export class ProjectStore {
         throw new Error('Cannot write goals into another Pi session');
       state.revision++;
       validateState(state);
-      const patch = diffState(previous.state, state);
       const stateText = JSON.stringify(state);
+      // Commit a detached JSON tree: cache, replay and callback-owned objects must
+      // not share references or disagree about omitted optional properties.
+      const committed = JSON.parse(stateText) as ProjectState;
+      const patch = diffState(previous.state, committed);
       // Periodic snapshots bound replay work after restart; sparse or large
       // changes are cheaper to store whole than as a long patch chain.
       const snapshot =
@@ -414,7 +417,7 @@ export class ProjectStore {
         at: new Date().toISOString(),
         event,
         previous: previous.hash,
-        ...(snapshot ? { state } : { patch }),
+        ...(snapshot ? { state: committed } : { patch }),
       };
       const hash = digest(payload);
       if (previous.tail) {
@@ -435,19 +438,19 @@ export class ProjectStore {
       }
       // The in-memory snapshot must match the journal even if the derived export fails.
       this.remember({
-        state,
+        state: committed,
         hash,
         bytes: previous.bytes + Buffer.byteLength(line),
         tail: '',
         lastSessionId: state.owner?.sessionId ?? previous.lastSessionId,
       });
       try {
-        this.export(state);
+        this.export(committed);
         this.exportError = undefined;
       } catch (e) {
         this.exportError = String(e);
       }
-      return structuredClone(state);
+      return structuredClone(committed);
     });
   }
   change(event: string, mutate: (s: ProjectState) => void) {
@@ -526,10 +529,22 @@ export class ProjectStore {
         '### Checks',
         '',
       );
-      for (const c of g.checks)
+      for (const c of g.checks) {
+        const r = c.last;
+        const passed =
+          r?.source === 'main-session' &&
+          r.success === true &&
+          r.exitCode === 0 &&
+          Boolean(r.toolCallId) &&
+          r.command === c.command &&
+          !r.inputChanged;
         report.push(
-          `- ${c.id}: ${c.command} — ${c.last ? `exit ${c.last.exitCode} @ ${c.last.at}` : 'Not run'}`,
+          `- ${c.id}: ${c.command} — ${r ? `${passed ? 'Recorded pass' : 'Not verified'}; exit ${r.exitCode ?? 'unknown'} @ ${r.at}` : 'Not run'}`,
         );
+        if (r?.command !== undefined && r.command !== c.command)
+          report.push(`  - Executed command: ${r.command}`);
+        if (r?.inputChanged) report.push('  - source changed during check; rerun required');
+      }
       report.push(
         '',
         '### Audit history',

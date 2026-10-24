@@ -28,13 +28,16 @@ The ordinary suite exercises runtime, store, request/reply, tools and review bou
 New regressions cover:
 
 - Missing, failed, legacy or stale check records cannot open completion review; stdout cannot forge structured exit metadata. Reruns invalidate prior success even when interrupted, and changes during execution prevent certification.
-- Actual SDK hooks can deny or rewrite nested commands. Receipts bind to the executed command observed in `tool_result.input`, rather than pre-hook arguments.
+- Actual SDK hooks can deny or rewrite nested commands, or terminate a run without another model request. Receipts bind to the executed command observed in `tool_result.input`, rather than pre-hook arguments.
 - Same-generation progress changes during asynchronous submission inventory are revalidated. Stale IDs for the new tools cannot claim ownership of or block a paused replacement goal.
 - The read-only registry exposes no execution, mutation, general dispatcher, MCP or recursive delegation tool.
-- Requests return to the main session, persist in the journal and do not spend repair attempts. Answers alone cannot pass or satisfy artifact inspection.
+- Requests return to the main session, persist in the journal and do not spend repair attempts. Answers alone cannot pass or satisfy artifact inspection, and replies cannot mutate original audit records through shared references.
+- Committed state is a detached JSON tree: cached snapshots and fresh journal reads agree, including optional undefined properties; caller-owned objects cannot mutate the committed cache.
+- Derived check reports distinguish recorded passes from zero-exit rejected or legacy receipts, and show rewritten commands and changed inputs.
+- Session-only cancellation is honored before and during review. Missing tools required for outstanding checks/replies pause continuation instead of requesting impossible work.
 - Unknown/stale request IDs, requests outside approved criteria/checks, and a request alongside a verdict cannot bypass review.
-- Source changes invalidate check records. Changes, deletion or retargeting of inspected artifacts invalidate a pass while retaining incurred usage.
-- Internal hardlinks and symlinks remain usable without a copied-source policy. Outside-project reads are rejected.
+- Source changes invalidate check records. Changes, deletion or retargeting of inspected artifacts, or an unreadable final inventory, invalidate a pass while retaining incurred usage and avoiding repair-failure accounting.
+- Internal hardlinks and symlinks remain usable without a copied-source policy. Outside-project reads are rejected. File reads enforce the actual byte limit even after growth and reject invalid UTF-8; read observations retain paths/digests instead of full artifact bodies.
 - Canonical Pi control paths and ordinary generated/dependency directories do not invalidate source records, including in symlinked workspaces. Ordinary source files named `build` remain tracked; explicitly reviewed generated files still receive content checks.
 - Old sandbox configuration does not block startup or select a command runner; old check records remain historical evidence and need rerunning for unfinished goals.
 

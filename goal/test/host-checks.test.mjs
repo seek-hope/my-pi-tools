@@ -14,7 +14,7 @@ import {
 import { GoalRuntime } from '../src/runtime.ts';
 import { activeGoal, makeGoal, applySpec, transition } from '../src/state.ts';
 
-for (const hook of ['deny', 'rewrite'])
+for (const hook of ['deny', 'rewrite', 'terminate'])
   test(
     `installed Pi host: ${hook} hook controls nested goal_check execution and invalidates prior success`,
     { timeout: 15000 },
@@ -114,7 +114,12 @@ for (const hook of ['deny', 'rewrite'])
             pi.on('tool_call', (event) => {
               if (event.toolName !== 'bash') return;
               nested.push(structuredClone(event));
-              if (hook === 'deny') return { block: true, reason: 'fixture denied the command' };
+              if (hook !== 'rewrite')
+                return {
+                  block: true,
+                  reason: 'fixture denied the command',
+                  ...(hook === 'terminate' ? { terminate: true } : {}),
+                };
               event.input.command = 'true';
             });
           },
@@ -161,6 +166,8 @@ for (const hook of ['deny', 'rewrite'])
       });
       await session.prompt('Run the approved check, then stop for operator input.');
       assert.deepEqual(errors, []);
+      if (hook === 'terminate')
+        assert.equal(calls, 1, 'a nested termination must stop before another model request');
       assert.equal(nested.length, 1);
       assert.equal(nested[0].parentToolCallId, 'call-1');
       assert.equal(nested[0].input.command, 'touch should-not-exist');

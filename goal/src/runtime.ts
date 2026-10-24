@@ -644,10 +644,22 @@ export class GoalRuntime {
         g = activeGoal(s);
       }
       if (!g || g.status !== 'active' || s.queuePaused) return;
-      if (!this.pi.getActiveTools().includes('goal_submit')) {
+      const generation = g.generation;
+      const required = [
+        'goal_submit',
+        ...(g.checks.some((c) => !c.last?.success || c.last.generation !== generation)
+          ? ['goal_check']
+          : []),
+        ...(g.auditRequests.some((r) => r.generation === generation && !r.answer)
+          ? ['goal_reply']
+          : []),
+      ];
+      const activeTools = this.pi.getActiveTools();
+      const missingTool = required.find((name) => !activeTools.includes(name));
+      if (missingTool) {
         this.stop(
           ctx,
-          'goal_submit is disabled by the tool policy; restore it before resuming',
+          `${missingTool} is disabled by the tool policy; restore it before resuming`,
           'paused',
           false,
         );
@@ -1106,7 +1118,10 @@ export class GoalRuntime {
           this.write('check.result', (s) => {
             activeGoal(s)!.checks.find((c) => c.id === check.id)!.last = result;
           });
-          return textResult(JSON.stringify(result), result);
+          return {
+            ...textResult(JSON.stringify(result), result),
+            ...(outcome.result.terminate === true ? { terminate: true } : {}),
+          };
         } finally {
           if (this.checkCall === call) this.checkCall = undefined;
           if (this.auditController === controller) this.auditController = undefined;
@@ -1225,7 +1240,12 @@ export class GoalRuntime {
         const problems = completionProblems(g);
         if (problems.length) throw new Error(problems.join('\n'));
         const fence = this.fence(g);
-        const stamp = await this.sourceStamp(ctx, signal);
+        const callerSignal = AbortSignal.any([
+          ...(signal ? [signal] : []),
+          ...(ctx.signal ? [ctx.signal] : []),
+        ]);
+        const stamp = await this.sourceStamp(ctx, callerSignal);
+        callerSignal.throwIfAborted();
         g = this.current(fence, ['active']);
         const currentProblems = completionProblems(g);
         if (currentProblems.length) throw new Error(currentProblems.join('\n'));
@@ -1249,7 +1269,7 @@ export class GoalRuntime {
         });
         this.auditController = new AbortController();
         const localController = this.auditController;
-        const combined = AbortSignal.any([localController.signal, ...(signal ? [signal] : [])]);
+        const combined = AbortSignal.any([localController.signal, callerSignal]);
         let audit: Audit | undefined;
         const workspace = new ReviewWorkspace(ctx.cwd);
         try {
@@ -1269,11 +1289,19 @@ export class GoalRuntime {
           );
           audit.workspaceStamp = stamp;
           if (audit.verdict === 'pass') {
-            await workspace.assertCurrent(combined);
-            if ((await this.sourceStamp(ctx, combined)) !== stamp)
-              throw new ReviewChangedError(
-                'Workspace changed during review; rerun checks and resubmit',
-              );
+            try {
+              await workspace.assertCurrent(combined);
+              if ((await this.sourceStamp(ctx, combined)) !== stamp)
+                throw new ReviewChangedError(
+                  'Workspace changed during review; rerun checks and resubmit',
+                );
+            } catch (error) {
+              throw error instanceof ReviewChangedError
+                ? error
+                : new ReviewChangedError(
+                    `Review inputs could not be revalidated: ${String(error)}`,
+                  );
+            }
           }
         } catch (error) {
           audit = {

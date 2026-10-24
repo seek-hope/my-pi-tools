@@ -238,6 +238,98 @@ test('journal stores deltas with periodic snapshots and reconstructs event histo
   );
 });
 
+test('committed state is detached from caller objects and matches a fresh journal read', (t) => {
+  const root = dir(t),
+    store = new ProjectStore(root, 'A');
+  store.claim();
+  const external = makeGoal('Immutable committed value');
+  store.change('add', (s) => s.goals.push(external));
+  external.objective = 'Mutated after commit';
+  assert.equal(store.load().goals[0].objective, 'Immutable committed value');
+  assert.deepEqual(store.load(), new ProjectStore(root, 'A').load());
+});
+test('optional undefined properties use the same JSON semantics in patches and cached snapshots', (t) => {
+  const root = dir(t),
+    store = new ProjectStore(root, 'A');
+  store.claim();
+  store.change('add', (s) => {
+    const g = makeGoal('Optional value');
+    g.notes.push('x'.repeat(8000));
+    g.reason = 'before';
+    s.goals.push(g);
+  });
+  store.change('unset.optional', (s) => {
+    s.goals[0].reason = undefined;
+  });
+  const entry = JSON.parse(readFileSync(store.file, 'utf8').trim().split('\n').at(-1));
+  assert.ok(entry.patch, 'exercise delta replay');
+  const fresh = new ProjectStore(root, 'A').load();
+  assert.equal(Object.hasOwn(fresh.goals[0], 'reason'), false);
+  assert.deepEqual(store.load(), fresh);
+});
+
+test('derived check reports distinguish verified receipts from zero-exit rejected commands', (t) => {
+  const root = dir(t),
+    store = new ProjectStore(root, 'A');
+  store.claim();
+  store.change('checks.fixture', (s) => {
+    const g = makeGoal('Report actual checks');
+    g.checks = [
+      {
+        id: 'K1',
+        command: 'npm test',
+        last: {
+          at: 'now',
+          command: 'true',
+          exitCode: 0,
+          output: '',
+          source: 'main-session',
+          toolCallId: 'rewritten',
+          success: false,
+        },
+      },
+      {
+        id: 'K2',
+        command: 'npm test',
+        last: {
+          at: 'now',
+          command: 'npm test',
+          exitCode: 0,
+          output: '',
+          inputChanged: true,
+          source: 'main-session',
+          toolCallId: 'changed',
+          success: false,
+        },
+      },
+      {
+        id: 'K3',
+        command: 'npm test',
+        last: { at: 'past', command: 'npm test', exitCode: 0, output: '' },
+      },
+      {
+        id: 'K4',
+        command: 'npm test',
+        last: {
+          at: 'now',
+          command: 'npm test',
+          exitCode: 0,
+          output: '',
+          source: 'main-session',
+          toolCallId: 'valid',
+          success: true,
+        },
+      },
+    ];
+    s.goals.push(g);
+  });
+  const report = readFileSync(join(store.directory, 'STATUS.md'), 'utf8');
+  for (const id of ['K1', 'K2', 'K3']) assert.match(report, new RegExp(`${id}:.*Not verified`));
+  assert.match(report, /Executed command: true/);
+  assert.match(report, /source changed during check/);
+  assert.match(report, /K4:.*Recorded pass/);
+});
+
 test('repeated reads reuse the parsed snapshot and detect external appends or tampering', (t) => {
   const root = dir(t);
   const first = new ProjectStore(root, 'A');

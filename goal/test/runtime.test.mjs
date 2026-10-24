@@ -906,6 +906,36 @@ test('external restrictive tool policy pauses rather than looping without a comp
   assert.equal(h.goal().status, 'paused');
 });
 
+for (const missing of ['goal_check', 'goal_reply'])
+  test(`missing required ${missing} pauses before requesting impossible continuation`, async (t) => {
+    const h = await harness(t);
+    if (missing === 'goal_check') await startWithChecks(h);
+    else {
+      await start(h);
+      h.rt.store.change('fixture.request', (s) => {
+        const g = activeGoal(s);
+        g.auditRequests.push({
+          id: 'pending',
+          generation: g.generation,
+          at: 'now',
+          criterionId: 'C1',
+          question: 'Where is the result?',
+        });
+      });
+    }
+    h.tools.delete(missing);
+    assert.equal(await h.emit('agent_before_settle', boundary), undefined);
+    assert.equal(h.goal().status, 'paused');
+    assert.match(h.goal().reason, new RegExp(missing));
+  });
+test('tools for absent checks or answered requests are not required for continuation', async (t) => {
+  const h = await harness(t);
+  await start(h);
+  h.tools.delete('goal_check');
+  h.tools.delete('goal_reply');
+  assert.equal((await h.emit('agent_before_settle', boundary)).continue, true);
+});
+
 function captureUI(h) {
   const view = { widget: undefined, status: undefined };
   h.ctx.mode = 'tui';
@@ -1974,6 +2004,32 @@ test('main checks are explicit, recorded from tool metadata and invalidated by s
   assert.equal(reviews, 1);
 });
 
+for (const timing of ['before', 'during'])
+  test(`session cancellation ${timing} review prevents completion without a separate tool signal`, async (t) => {
+    const controller = new AbortController();
+    let reviews = 0;
+    const h = await harness(t, {
+      audit: async () => {
+        reviews++;
+        controller.abort();
+        return audit();
+      },
+    });
+    await start(h);
+    await evidence(h);
+    h.ctx.signal = controller.signal;
+    if (timing === 'before') {
+      controller.abort();
+      await assert.rejects(h.tool('goal_submit', { ...goalKey(h), summary: 'done' }), /aborted/i);
+      assert.equal(reviews, 0);
+      assert.equal(h.goal().status, 'active');
+    } else {
+      await h.tool('goal_submit', { ...goalKey(h), summary: 'done' });
+      assert.equal(h.goal().status, 'paused');
+      assert.equal(h.goal().usage.auditTokens, 10);
+    }
+  });
+
 test('reviewer information requests persist, do not spend repair attempts, and require a fresh audit', async (t) => {
   let reviews = 0;
   const h = await harness(t, {
@@ -2005,11 +2061,17 @@ test('reviewer information requests persist, do not spend repair attempts, and r
   assert.equal(h.goal().consecutiveAuditFailures, 0);
   assert.equal((await submit()).details.disposition, 'evidence_needed');
   assert.equal(reviews, 1);
+  const originalAudit = structuredClone(h.goal().audits.at(-1));
   await h.tool('goal_reply', {
     ...goalKey(h),
     request_id: 'request-1',
     answer: 'result.txt:1 contains the result',
   });
+  assert.deepEqual(
+    h.goal().audits.at(-1),
+    originalAudit,
+    'a reply must not rewrite the original reviewer record',
+  );
   assert.equal(h.goal().status, 'active');
   await submit();
   assert.equal(h.goal().status, 'complete');
@@ -2047,6 +2109,24 @@ test('stale reviewer requests cannot be answered after user supplements or clear
       .disposition,
     'stale_goal',
   );
+});
+
+test('a filesystem failure during final source revalidation is not an implementation repair failure', async (t) => {
+  const h = await harness(t, { audit: async () => audit() });
+  await start(h);
+  await evidence(h);
+  const original = h.rt.sourceStamp.bind(h.rt);
+  let calls = 0;
+  t.mock.method(h.rt, 'sourceStamp', (...args) => {
+    if (++calls === 2)
+      throw Object.assign(new Error('source disappeared during inventory'), { code: 'ENOENT' });
+    return original(...args);
+  });
+  await h.tool('goal_submit', { ...goalKey(h), summary: 'done' });
+  assert.equal(h.goal().status, 'active');
+  assert.equal(h.goal().audits.at(-1).errorKind, 'input_changed');
+  assert.equal(h.goal().consecutiveAuditFailures, 0);
+  assert.equal(h.goal().usage.auditTokens, 10);
 });
 
 test('review freshness failure preserves incurred usage without completing or counting a repair', async (t) => {

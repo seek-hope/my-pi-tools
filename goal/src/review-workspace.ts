@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
-import { lstat, readdir, readlink, realpath, readFile } from 'node:fs/promises';
+import { isUtf8 } from 'node:buffer';
+import { lstat, readdir, readlink, realpath, open } from 'node:fs/promises';
 import { join, relative, resolve, isAbsolute, sep } from 'node:path';
 
 // These paths change during ordinary dependency installation/builds or contain Goal's
@@ -84,6 +85,31 @@ export async function workspaceStamp(
   signal?.throwIfAborted();
   return digest.digest('hex');
 }
+const MAX_TEXT_BYTES = 5000000;
+async function readText(path: string) {
+  const file = await open(path, 'r');
+  try {
+    const info = await file.stat();
+    if (!info.isFile() || info.size > MAX_TEXT_BYTES)
+      throw new Error('Only text files up to 5 MB are supported');
+    const chunks: Buffer[] = [];
+    let total = 0;
+    while (total <= MAX_TEXT_BYTES) {
+      const chunk = Buffer.allocUnsafe(Math.min(65536, MAX_TEXT_BYTES + 1 - total));
+      const { bytesRead } = await file.read(chunk, 0, chunk.length, null);
+      if (!bytesRead) break;
+      total += bytesRead;
+      if (total > MAX_TEXT_BYTES) throw new Error('Only text files up to 5 MB are supported');
+      chunks.push(chunk.subarray(0, bytesRead));
+    }
+    const bytes = Buffer.concat(chunks, total);
+    if (!isUtf8(bytes) || bytes.includes(0))
+      throw new Error('Provide a UTF-8 text or statistical export for binary files');
+    return bytes.toString('utf8');
+  } finally {
+    await file.close();
+  }
+}
 /** Track the exact text and directory listings seen by this temporary reviewer. */
 export class ReviewWorkspace {
   readonly cwd: string;
@@ -97,28 +123,26 @@ export class ReviewWorkspace {
   private async observe(path: string, kind: 'file' | 'directory') {
     const actual = await projectPath(this.cwd, path);
     const info = await lstat(actual);
-    if (kind === 'file' && (!info.isFile() || info.size > 5000000))
+    if (kind === 'file' && (!info.isFile() || info.size > MAX_TEXT_BYTES))
       throw new Error('Only text files up to 5 MB are supported');
     if (kind === 'directory' && !info.isDirectory()) throw new Error('Not a directory');
     const text =
       kind === 'file'
-        ? await readFile(actual, 'utf8')
+        ? await readText(actual)
         : (await readdir(actual, { withFileTypes: true }))
             .map((x) => `${x.name}${x.isDirectory() ? '/' : ''}`)
             .sort()
             .join('\n');
-    if (kind === 'file' && text.includes('\0'))
-      throw new Error('Provide a reviewable text or statistical export for binary files');
     return { requested: path, actual, kind, digest: hash(text), text };
   }
   async read(path: string, kind: 'file' | 'directory' = 'file') {
-    const next = await this.observe(path, kind),
+    const { text, ...next } = await this.observe(path, kind),
       key = `${kind}:${path}`;
     const previous = this.observations.get(key);
     if (previous && (previous.actual !== next.actual || previous.digest !== next.digest))
       throw new ReviewChangedError(`Reviewed artifact changed: ${path}`);
     this.observations.set(key, next);
-    return next.text;
+    return text;
   }
   async assertCurrent(signal?: AbortSignal) {
     for (const previous of this.observations.values()) {
