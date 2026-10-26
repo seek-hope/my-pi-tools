@@ -6,5 +6,5 @@ coverage/
 dist/
 *.log
 
-# Local my-pi-goal session state
+# Historical Goal journals remain private after the Helper migration
 **/.pi/my-pi-goal/
