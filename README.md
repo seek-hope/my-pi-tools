@@ -10,7 +10,7 @@
 | [`search/`](search/README.md) | `pi-deepseek-web` | 合并 DeepSeek 与 Exa 的 `web_search` / `web_fetch`，单源可用时静默回退 | DeepSeek 或 Exa API Key |
 | [`helper/`](helper/README.md) | `my-pi-helper` | 主会话按需委派任务；独立上下文，默认只读，可显式允许修改文件和执行命令 | Pi 主会话工具与已配置模型 |
 
-三者互不依赖，可以单独安装。Helper 的中文说明见 [README.zh-CN.md](helper/README.zh-CN.md)。原 Goal 已由 Helper 替换，旧实现保留在 Git 历史中。
+三者互不依赖，可以单独安装。Helper 的中文说明见 [README.zh-CN.md](helper/README.zh-CN.md)。
 
 ## 环境要求
 
@@ -33,8 +33,6 @@ pi install ./helper
 只对当前项目安装，使用 `pi install -l /绝对路径/my-pi-tools/<包>`；只想临时加载、不写配置，可以 `pi -e /绝对路径/my-pi-tools/<包>/src/index.ts`（Helper 的入口是 `extensions/index.ts`）。安装后在已运行的 Pi 中执行 `/reload`。
 
 三个包都未发布到 npm，请从本地路径安装。
-
-曾安装 Goal 的用户，需要先用 `pi list` 找到并移除旧来源，再安装 Helper 并 `/reload`。已加载的 Goal 在卸载前仍会保留原有钩子。详见 [迁移说明](helper/README.zh-CN.md#安装与迁移)；Helper 不会自动恢复旧目标或改写历史日志。
 
 ## 快速上手
 
@@ -76,7 +74,7 @@ export EXA_API_KEY=...
 
 需要委派修改时，显式设置 `"mode": "work"`。默认 `read` 模式只开放宿主可调用的读取、搜索和列表工具；`work` 额外允许宿主的写入、编辑和命令工具。
 
-Helper 不继承主会话历史、系统提示、推理或压缩摘要。它只处理请求材料，并在本次调用内保留自己的工具结果。正常回答、失败、取消或达到有限的执行上限后都会返回；主会话决定下一步。Helper 不安装自动续跑或目标验收钩子。
+Helper 不继承主会话历史、系统提示、推理或压缩摘要。它只处理请求材料，并在本次调用内保留自己的工具结果。正常回答、失败、取消或达到有限的执行上限后都会返回；主会话决定下一步。
 
 ## 仓库结构
 
@@ -110,7 +108,7 @@ npm --prefix helper run check:format
 npm --prefix helper run check:compat  # Pi 1.3.0 / 1.4.0：类型、完整测试、扩展加载
 ```
 
-测试使用本地 mock 或离线 provider，不需要付费 API；Helper 的 SDK 测试会在临时工作区实际修改文件、执行命令并验证权限钩子，`smoke` 也不调用 LLM。旧 Goal 的形式化收据不适用于 Helper。
+测试使用本地 mock 或离线 provider，不需要付费 API；Helper 的 SDK 测试会在临时工作区实际修改文件、执行命令并验证权限钩子，`smoke` 也不调用 LLM。
 
 ## CI
 
@@ -119,7 +117,7 @@ npm --prefix helper run check:compat  # Pi 1.3.0 / 1.4.0：类型、完整测试
 ## 边界与限制
 
 - **Helper**：独立上下文、显式工具名单和有限调用；所有工具经过宿主权限钩子。共享工作区不等于文件系统隔离，工作模式的修改不会自动回滚。工具和 provider 必须响应中止信号；模型回答不等于独立验收。
-- **Helper** 第一版支持文本输出、前台调用和每次新建上下文。没有后台队列、持久化子会话或并行编排；只读模式不会自动启用宿主未开放的搜索和列表工具。
+- **Helper** 支持文本输出、前台调用和每次新建上下文。没有后台队列、持久化子会话或并行编排；只读模式不会自动启用宿主未开放的搜索和列表工具。
 - **Search**：API 地址默认必须 HTTPS；抓取前校验 DNS，拒绝回环、私网、元数据和保留地址；重定向按错误处理；溢出的全文写入当前用户私有目录。上游服务仍会自行解析目标地址，本地校验不等价于网络层出站策略。
 - **CodeGraph**：不自动建索引，不写入 `mcp.json` 或个人设置；为它启动的子进程关闭遥测和升级检查。图谱结果不能替代编译、测试和 lint。
 
@@ -129,7 +127,7 @@ npm --prefix helper run check:compat  # Pi 1.3.0 / 1.4.0：类型、完整测试
 | --- | --- |
 | [codegraph/README.md](codegraph/README.md) | 安装、MCP 暴露方式、命令、环境变量、生命周期 |
 | [search/README.md](search/README.md) | provider 选择、配置、缓存与截断、SSRF 说明 |
-| [helper/README.md](helper/README.md) | 请求接口、工具模式、限制、配置、迁移与验证 |
+| [helper/README.md](helper/README.md) | 请求接口、工具模式、限制、配置与验证 |
 | [helper/README.zh-CN.md](helper/README.zh-CN.md) | Helper 中文说明 |
 | [helper/DESIGN.md](helper/DESIGN.md) | 上下文隔离、调用流程和边界 |
 

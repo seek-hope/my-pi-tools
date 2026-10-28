@@ -66,7 +66,7 @@ Only tools actually exposed by the host are included. Helper does not enable dis
 
 Every tool invocation uses Pi's `ctx.executeTool`, preserving native validation, permission hooks and cancellation. Rewritten arguments observed in host tool-result events are reported to the helper. A failed or denied tool stops the invocation with an error and the last tool's output. A host `terminate` request stops Helper and is propagated to the main tool result. Changes already made in work mode remain in the shared workspace; there is no rollback.
 
-Helper does not expose a shell in read mode, an arbitrary dispatcher, MCP, parent-session inspection, Goal tools or recursive delegation. Tool implementations and host extensions are trusted: replacing a conventional read tool with a writing implementation would violate the read-mode assumption. Context separation is not an operating-system or filesystem sandbox.
+Tool access is limited to the names above. Tool implementations and host extensions are trusted: replacing a conventional read tool with a writing implementation would violate the read-mode assumption. Context separation is not an operating-system or filesystem sandbox.
 
 ## Results and stopping
 
@@ -82,9 +82,13 @@ Results include `status`, `mode`, `model`, `output`, `reason`, `partial`, `turns
 
 Invalid invocation arguments or settings can be rejected before a Helper result exists; Pi reports these as ordinary tool errors.
 
-`answered` means a model answer was returned, not that the user's overall task has been independently verified. Other statuses have `partial: true`; the latest nonempty model text and last tool output are retained when available. `usage` records Helper's model calls; Pi adds nested-tool usage separately. Missing or invalid provider usage is marked `usageIncomplete`, not treated as verified zero cost. Missing aggregate counts and costs fall back to the known components; unrepresentable totals remain partial rather than overflowing. Optional `reasoning` and `cacheWrite1h` breakdowns accumulate when reported; they are subsets of existing token counts and do not increase totals or costs. `turns` counts model requests started, excluding cancellation during a progress update.
+`answered` means a model answer was returned, not that the user's overall task has been independently verified. Other statuses have `partial: true`; the latest nonempty model text and last tool output are retained when available.
 
-Helper uses ordinary final answers, without a mandatory audit-result tool. It never installs main-session continuation hooks, retries a task, persists a goal queue or waits indefinitely for a reply. The caller can choose to make another explicit request. At the last allowed model turn, further tool calls are not executed without a remaining opportunity to consume their results. Tool batches are validated before any member runs, including SDK argument-parsing errors and missing, malformed or reused call IDs. Exhausting the tool-call budget still permits a model request to interpret the last result and answer, within the remaining turn, time and context limits; any further tool batch is rejected.
+`usage` records Helper's model calls; Pi adds nested-tool usage separately. Missing or invalid provider usage is marked `usageIncomplete`, not treated as verified zero cost. Missing aggregate counts and costs fall back to the known components; unrepresentable totals remain partial rather than overflowing. Optional `reasoning` and `cacheWrite1h` breakdowns accumulate when reported; they are subsets of existing token counts and do not increase totals or costs. `turns` counts model requests started, excluding cancellation during a progress update.
+
+A normal final answer ends the invocation. Missing information is returned to the caller, which can supply it in another explicit request. Helper does not automatically retry tasks or resume the main session, and each invocation has its own conversation.
+
+At the last allowed model turn, further tool calls are not executed without a remaining opportunity to consume their results. Tool batches are validated before any member runs, including SDK argument-parsing errors and missing, malformed or reused call IDs. Exhausting the tool-call budget still permits a model request to interpret the last result and answer, within the remaining turn, time and context limits; any further tool batch is rejected.
 
 Each invocation has a cancellable deadline, also checked against a monotonic clock between operations so a delayed timer cannot start further work after expiry. Cancellation is cooperative with host tools and providers; Helper does not provide process isolation or forcibly terminate arbitrary extension code. The model-turn limit is finite even when a model repeatedly asks to use tools.
 
@@ -111,28 +115,13 @@ Optional settings are read from:
 | `timeoutSeconds` | 1,200 | 1–3,600 seconds |
 | `maxContextChars` | 200,000 | 1,000–2,000,000 characters in the serialized context, including tools |
 
-Each model request uses the selected model's own maximum output-token allowance (`model.maxTokens`); Helper imposes no additional per-turn token cap. The former `maxOutputTokens` setting has been removed; delete it from existing configuration files. The separate 32,000-character returned-answer limit still applies.
+Each model request uses the selected model's own maximum output-token allowance (`model.maxTokens`). The separate 32,000-character returned-answer limit still applies.
 
 The context character limit is not an exact token or monetary budget. Each model request is metered by the provider, including replayed inputs.
 
 Optional `provider` and `model` select a different configured model; set both together. Otherwise Helper uses the current main model's identity. Optional `thinking` is `off`, `minimal`, `low`, `medium`, `high`, `xhigh` or `max`; otherwise it uses the current thinking level. Only model configuration and credential resolution are reused, never the conversation or hidden reasoning.
 
-Unknown settings, invalid limits and incomplete model configuration are rejected. Historical Goal settings are ignored. Tool-output excerpts and answers are limited to 32,000 characters with explicit truncation; request narrower output or smaller read ranges for more detail. This first version supports text outputs, foreground calls and fresh contexts only.
-
-## Migrate from Goal
-
-Goal has been removed from the current repository. Its previous implementation remains in [Git history](https://github.com/seek-hope/my-pi-tools/tree/d12c27f/goal).
-
-Use `pi list` to find the old Goal source, then remove that **same source** and install Helper. For an installation using local absolute paths:
-
-```bash
-pi remove /absolute/path/my-pi-tools/goal
-pi install /absolute/path/my-pi-tools/helper
-```
-
-Use `-l` for project-local package declarations. If Goal was loaded through an explicit extension entry instead of a package, disable that entry with `pi config` or remove it from the original launch arguments. Then run `/reload`, or start a new Pi process. A Goal instance already loaded in memory keeps its old hooks until it is unloaded.
-
-Helper itself does not edit personal Pi settings, rewrite historical journals or turn old goals into Helper tasks. Installation entries are changed through the Pi package commands above. Old Goal state remains ignored by Git. There is no `/goal` compatibility command and no automatic conversion of pending goals.
+Unknown settings, invalid limits and incomplete model configuration are rejected. Tool-output excerpts and answers are limited to 32,000 characters with explicit truncation; request narrower output or smaller read ranges for more detail. Helper supports text outputs, foreground calls and fresh contexts.
 
 ## Development and verification
 
@@ -146,6 +135,6 @@ npm --prefix helper run check:compat
 
 `check:compat` uses installed releases from `~/.pi/agent/install/releases` by default; pass another releases directory after `--` if needed. It copies the package into temporary directories and checks types, the full suite and isolated extension loading on both supported Pi releases, without relinking a live installation.
 
-Tests use offline providers with the actual Pi SDK. They capture provider inputs to check context separation; exercise fresh calls, cancellation, limits and usage accounting; perform real file edits and command execution; and test host deny/rewrite/terminate hooks. CI runs Node 22 and 24 with Pi 1.3.0 and 1.4.0. These tests do not claim paid-model quality evaluation or formal verification. Goal's historical verification receipts are not Helper evidence.
+Tests use offline providers with the actual Pi SDK. They capture provider inputs to check context separation; exercise fresh calls, cancellation, limits and usage accounting; perform real file edits and command execution; and test host deny/rewrite/terminate hooks. CI runs Node 22 and 24 with Pi 1.3.0 and 1.4.0. These tests cover runtime behavior and integration; they do not evaluate model-answer quality or provide formal verification.
 
 [MIT](../LICENSE)
