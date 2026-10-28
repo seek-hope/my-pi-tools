@@ -198,7 +198,7 @@ test('unknown usage does not prevent accounting for later responses', async () =
   assert.equal(r.usage.totalTokens, 10);
 });
 test('model selection uses the configured model and thinking without falling back silently', async () => {
-  const selected = { ...model, id: 'alternative' };
+  const selected = { ...model, id: 'alternative', maxTokens: 65536 };
   const f = fixture([message('Done')], { resolve: () => selected });
   const r = await runHelper({ task: 'Analyze' }, f.ctx, {
     ...f.settings,
@@ -208,6 +208,11 @@ test('model selection uses the configured model and thinking without falling bac
   });
   assert.match(r.model, /alternative/);
   assert.equal(f.requests[0].reasoning, 'high');
+  assert.equal(
+    f.requests[0].maxTokens,
+    selected.maxTokens,
+    'only the selected model limits per-turn output',
+  );
   const g = fixture([]);
   assert.equal(
     (

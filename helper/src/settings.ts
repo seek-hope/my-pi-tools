@@ -11,20 +11,18 @@ const fields = {
       ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].map((v) => Type.Literal(v)),
     ),
   ),
-  maxTurns: Type.Integer({ minimum: 1, maximum: 64 }),
-  maxToolCalls: Type.Integer({ minimum: 1, maximum: 256 }),
+  maxTurns: Type.Integer({ minimum: 1, maximum: 200 }),
+  maxToolCalls: Type.Integer({ minimum: 1, maximum: 1000 }),
   timeoutSeconds: Type.Integer({ minimum: 1, maximum: 3600 }),
-  maxOutputTokens: Type.Integer({ minimum: 1, maximum: 32768 }),
   maxContextChars: Type.Integer({ minimum: 1000, maximum: 2000000 }),
 };
 export const settingsSchema = Type.Object(fields, { additionalProperties: false });
 const partialSchema = Type.Partial(settingsSchema);
 export type Settings = Static<typeof settingsSchema>;
 export const defaults: Settings = {
-  maxTurns: 16,
-  maxToolCalls: 64,
-  timeoutSeconds: 300,
-  maxOutputTokens: 4096,
+  maxTurns: 20,
+  maxToolCalls: 200,
+  timeoutSeconds: 1200,
   maxContextChars: 200000,
 };
 export function validateSettings(value: unknown): asserts value is Settings {

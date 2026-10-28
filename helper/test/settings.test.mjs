@@ -32,7 +32,10 @@ test('settings merge only explicit Helper files and ignore historical Goal setti
   a.maxTurns = 1;
   assert.equal(loadSettings(cwd, agentDir).maxTurns, 4);
 });
-test('invalid, unbounded or unknown settings are rejected', (t) => {
+test('settings accept upper bounds and reject invalid, unbounded or unknown values', (t) => {
+  assert.doesNotThrow(() =>
+    validateSettings({ ...defaults, maxTurns: 200, maxToolCalls: 1000, timeoutSeconds: 3600 }),
+  );
   const { cwd, agentDir } = directories(t);
   const file = join(agentDir, 'my-pi-helper.json');
   for (const value of [
@@ -40,27 +43,23 @@ test('invalid, unbounded or unknown settings are rejected', (t) => {
     [],
     { maxTurns: 0 },
     { maxTurns: null },
-    { maxTurns: 65 },
+    { maxTurns: 201 },
     { maxTurns: 1.5 },
     { provider: 'p' },
     { provider: ' ', model: 'm' },
     { thinking: 'invalid' },
     { autoContinue: true },
     { timeoutSeconds: 0 },
-    { maxToolCalls: 257 },
+    { timeoutSeconds: 3601 },
+    { maxToolCalls: 1001 },
+    { maxOutputTokens: 4096 },
   ]) {
     writeFileSync(file, JSON.stringify(value));
     assert.throws(() => loadSettings(cwd, agentDir));
   }
   writeFileSync(file, '{not json');
   assert.throws(() => loadSettings(cwd, agentDir), /Cannot read/);
-  for (const key of [
-    'maxTurns',
-    'maxToolCalls',
-    'timeoutSeconds',
-    'maxOutputTokens',
-    'maxContextChars',
-  ])
+  for (const key of ['maxTurns', 'maxToolCalls', 'timeoutSeconds', 'maxContextChars'])
     assert.throws(() => validateSettings({ ...defaults, [key]: Infinity }));
 });
 test('registration adds one model-only tool and only observation/shutdown hooks', (t) => {

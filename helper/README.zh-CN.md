@@ -93,15 +93,16 @@ Helper 不安装主会话自动续跑钩子，不维护目标队列，不要求�
 
 ```json
 {
-  "maxTurns": 16,
-  "maxToolCalls": 64,
-  "timeoutSeconds": 300,
-  "maxOutputTokens": 4096,
+  "maxTurns": 20,
+  "maxToolCalls": 200,
+  "timeoutSeconds": 1200,
   "maxContextChars": 200000
 }
 ```
 
-允许范围分别为：轮次 1–64、工具调用 1–256、超时 1–3,600 秒、单次输出 1–32,768 token、序列化上下文 1,000–2,000,000 字符。上下文字符数包含工具定义，不是精确 token 或费用预算。
+允许范围分别为：轮次 1–200、工具调用 1–1,000、超时 1–3,600 秒、序列化上下文 1,000–2,000,000 字符。上下文字符数包含工具定义，不是精确 token 或费用预算。
+
+每轮模型请求直接使用所选模型自身的输出上限（`model.maxTokens`），Helper 不再另设每轮 token 上限。旧的 `maxOutputTokens` 配置项已移除，已有配置中如包含该字段，需要删除。最终返回回答的 32,000 字符限制仍然保留。
 
 可同时设置 `provider` 和 `model` 选择其他已配置模型；不设置则复用当前模型的标识与认证。`thinking` 可设为 `off`、`minimal`、`low`、`medium`、`high`、`xhigh`、`max`，默认使用当前思考等级。这些配置复用不会带入主会话对话内容。
 

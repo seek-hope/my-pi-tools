@@ -213,7 +213,7 @@ export async function runHelper(
       const response = await ctx.modelRegistry
         .streamSimple(model, context, {
           signal,
-          maxTokens: Math.min(settings.maxOutputTokens, model.maxTokens),
+          maxTokens: model.maxTokens,
           ...(thinking && thinking !== 'off'
             ? { reasoning: thinking as 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' }
             : {}),

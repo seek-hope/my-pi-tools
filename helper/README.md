@@ -97,21 +97,21 @@ Optional settings are read from:
 
 ```json
 {
-  "maxTurns": 16,
-  "maxToolCalls": 64,
-  "timeoutSeconds": 300,
-  "maxOutputTokens": 4096,
+  "maxTurns": 20,
+  "maxToolCalls": 200,
+  "timeoutSeconds": 1200,
   "maxContextChars": 200000
 }
 ```
 
 | Setting | Default | Allowed range |
 | --- | --- | --- |
-| `maxTurns` | 16 | 1–64 model requests |
-| `maxToolCalls` | 64 | 1–256 tool calls |
-| `timeoutSeconds` | 300 | 1–3,600 seconds |
-| `maxOutputTokens` | 4,096 | 1–32,768, also bounded by the selected model's output limit |
+| `maxTurns` | 20 | 1–200 model requests |
+| `maxToolCalls` | 200 | 1–1,000 tool calls |
+| `timeoutSeconds` | 1,200 | 1–3,600 seconds |
 | `maxContextChars` | 200,000 | 1,000–2,000,000 characters in the serialized context, including tools |
+
+Each model request uses the selected model's own maximum output-token allowance (`model.maxTokens`); Helper imposes no additional per-turn token cap. The former `maxOutputTokens` setting has been removed; delete it from existing configuration files. The separate 32,000-character returned-answer limit still applies.
 
 The context character limit is not an exact token or monetary budget. Each model request is metered by the provider, including replayed inputs.
 
