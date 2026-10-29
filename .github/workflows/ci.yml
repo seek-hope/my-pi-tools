@@ -31,6 +31,10 @@ jobs:
             codegraph/package-lock.json
             search/package-lock.json
             helper/package-lock.json
+      - name: Install native navigation tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ripgrep fd-find
       - name: Install codegraph dependencies
         working-directory: codegraph
         run: npm ci --ignore-scripts --no-audit --no-fund
@@ -44,6 +48,8 @@ jobs:
         working-directory: helper
         run: npm install --no-save --package-lock=false --ignore-scripts --no-audit --no-fund @earendil-works/pi-ai@${{ matrix.pi }} @earendil-works/pi-coding-agent@${{ matrix.pi }}
       - name: Typecheck and test
+        env:
+          PI_OFFLINE: "1"
         run: npm run check && npm test
       - name: Check Helper formatting
         run: npm --prefix helper run check:format

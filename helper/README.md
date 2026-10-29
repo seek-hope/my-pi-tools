@@ -62,9 +62,17 @@ Helper selects an explicit subset of the host's currently callable tools:
 | `read` | `read`, `grep`, `find`, `ls` |
 | `work` | Read tools plus `write`, `edit`, `bash`, `powershell` |
 
-Only tools actually exposed by the host are included. Helper does not enable disabled tools. With Pi's default tool selection, read mode may have only `read`; supply exact file paths, or enable `grep`, `find` and `ls` in the host if broader navigation is needed.
+Only tools actually exposed by the host are included. Helper does not enable disabled tools. With Pi's default tool selection, read mode may have only `read`. For file discovery and targeted searches, merge this into the project's `.pi/settings.json` (not `my-pi-helper.json`), preserving any existing tool choices:
 
-Every tool invocation uses Pi's `ctx.executeTool`, preserving native validation, permission hooks and cancellation. Rewritten arguments observed in host tool-result events are reported to the helper. A failed or denied tool stops the invocation with an error and the last tool's output. A host `terminate` request stops Helper and is propagated to the main tool result. Changes already made in work mode remain in the shared workspace; there is no rollback.
+```json
+{
+  "defaultTools": ["+grep", "+find", "+ls"]
+}
+```
+
+Use `/reload` in a session using the default tool selection, or restart Pi. Explicit `--tools` selections must also include these tools. These settings expose navigation tools in the host as well as Helper; they do not expand Helper's read-mode allowlist. Prefer discovery and search before reading narrow ranges.
+
+Every tool invocation uses Pi's `ctx.executeTool`, preserving native validation, permission hooks and cancellation. Rewritten arguments observed in host tool-result events are reported to the helper. Known file-lookup and read-range errors from an actually executed read-only tool are returned to the model as error results so it can correct the path or range within the same invocation. Corrections consume the existing budgets; Helper does not automatically restart a task or retry provider failures. Permission denials, unknown errors, failed work tools and unsupported non-text results still stop the invocation with an error and the last tool's output. A host `terminate` request stops Helper and is propagated to the main tool result. Changes already made in work mode remain in the shared workspace; there is no rollback.
 
 Tool access is limited to the names above. Tool implementations and host extensions are trusted: replacing a conventional read tool with a writing implementation would violate the read-mode assumption. Context separation is not an operating-system or filesystem sandbox.
 
@@ -104,7 +112,7 @@ Optional settings are read from:
   "maxTurns": 20,
   "maxToolCalls": 200,
   "timeoutSeconds": 1200,
-  "maxContextChars": 200000
+  "maxContextChars": 2000000
 }
 ```
 
@@ -113,11 +121,11 @@ Optional settings are read from:
 | `maxTurns` | 20 | 1–200 model requests |
 | `maxToolCalls` | 200 | 1–1,000 tool calls |
 | `timeoutSeconds` | 1,200 | 1–3,600 seconds |
-| `maxContextChars` | 200,000 | 1,000–2,000,000 characters in the serialized context, including tools |
+| `maxContextChars` | 2,000,000 | 1,000–2,000,000 characters in the serialized context, including tools |
 
 Each model request uses the selected model's own maximum output-token allowance (`model.maxTokens`). The separate 32,000-character returned-answer limit still applies.
 
-The context character limit is not an exact token or monetary budget. Each model request is metered by the provider, including replayed inputs.
+The 2M default means 2,000,000 characters in the serialized context, not tokens. The model's own context window still applies; this limit does not enlarge it or compact the context. It is not an exact token or monetary budget. Each model request is metered by the provider, including replayed inputs.
 
 Optional `provider` and `model` select a different configured model; set both together. Otherwise Helper uses the current main model's identity. Optional `thinking` is `off`, `minimal`, `low`, `medium`, `high`, `xhigh` or `max`; otherwise it uses the current thinking level. Only model configuration and credential resolution are reused, never the conversation or hidden reasoning.
 
@@ -135,6 +143,6 @@ npm --prefix helper run check:compat
 
 `check:compat` uses installed releases from `~/.pi/agent/install/releases` by default; pass another releases directory after `--` if needed. It copies the package into temporary directories and checks types, the full suite and isolated extension loading on both supported Pi releases, without relinking a live installation.
 
-Tests use offline providers with the actual Pi SDK. They capture provider inputs to check context separation; exercise fresh calls, cancellation, limits and usage accounting; perform real file edits and command execution; and test host deny/rewrite/terminate hooks. CI runs Node 22 and 24 with Pi 1.3.0 and 1.4.0. These tests cover runtime behavior and integration; they do not evaluate model-answer quality or provide formal verification.
+The native navigation tests require `rg` and `fd` (or `fdfind`) on `PATH` or in Pi's tools directory; CI installs `ripgrep` and `fd-find` and disables automatic downloads. Tests use offline providers with the actual Pi SDK. They capture provider inputs to check context separation; exercise fresh calls, cancellation, limits and usage accounting; perform real file edits and command execution; and test host deny/rewrite/terminate hooks. CI runs Node 22 and 24 with Pi 1.3.0 and 1.4.0. These tests cover runtime behavior and integration; they do not evaluate model-answer quality or provide formal verification.
 
 [MIT](../LICENSE)

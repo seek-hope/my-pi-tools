@@ -33,15 +33,17 @@ The tool set is the intersection of an explicit allowlist and the host's current
 | `read` | `read`, `grep`, `find`, `ls` |
 | `work` | Read tools plus `write`, `edit`, `bash`, `powershell` |
 
+Helper does not activate disabled tools; configure host `defaultTools` to add navigation tools as described in the README. The fixed prompt favors path discovery and targeted searches over guessed paths, offsets or repeated full-document reads.
+
 The runner copies tool definitions into the model context and sends every execution through `ctx.executeTool`. Native argument validation, permission hooks, cancellation and termination remain in effect. Host tool-result events supply the arguments actually executed after hook rewrites.
 
-Before any member of a tool batch runs, the runner checks the available tool names, schemas, SDK argument-parsing errors and call IDs. Invalid or reused IDs reject the batch. A failed or denied tool ends the invocation with a partial result. Host termination is propagated to the main tool result.
+Before any member of a tool batch runs, the runner checks the available tool names, schemas, SDK argument-parsing errors and call IDs. Invalid or reused IDs reject the batch. Known file-lookup and read-range errors can be appended as `isError: true` tool results, allowing the model to correct its request within the existing budgets. Recovery requires both an allowlisted read-only error message and a finite nonnegative `AgentToolCallOutcome.durationMs`. In Pi 1.3/1.4 this timing field is absent when validation or a permission hook prevents execution; denial text alone never authorizes recovery. The whitelist covers `read` ENOENT/ENOTDIR/EISDIR and out-of-range offsets, plus `ls` reporting a non-directory path. Generic navigation-tool 'Path not found' errors remain fatal because Pi also uses that text for OS access failures. Unknown errors, work-tool errors, permission denials and non-text results remain fatal. Cancellation and host termination take precedence over recovery, and termination is propagated to the main tool result.
 
 Tool implementations and host extensions are trusted. Work-mode changes remain in the shared workspace; Helper does not provide rollback or an operating-system sandbox.
 
 ## Limits and cancellation
 
-Settings bound model requests, tool calls, elapsed time and serialized context size. Defaults and allowed ranges are listed in the [configuration reference](README.md#configuration). Each model request uses the selected model's own output-token limit. Tool-result excerpts and returned answers have separate character limits.
+Settings bound model requests, tool calls, elapsed time and serialized context size. The default context budget is 2,000,000 characters, not tokens; the model's own context window remains a separate limit. Context is not automatically compacted. Defaults and allowed ranges are listed in the [configuration reference](README.md#configuration). Each model request uses the selected model's own output-token limit. Tool-result excerpts and returned answers have separate character limits.
 
 A model request may use the last tool result to produce an answer after the tool-call allowance is exhausted, provided the other limits permit it. Any further tool batch is rejected. On the last allowed model turn, tool calls are rejected because no later model request could consume their results.
 
@@ -74,7 +76,8 @@ Offline provider fixtures and real Pi SDK tests cover:
 - Absence of parent-session sentinels from provider requests and presence of explicitly supplied material.
 - Tool-result retention within one invocation and independent state across invocations.
 - Read-only capability boundaries, allowed work-mode edits and commands, and native deny/rewrite/terminate hooks.
-- Batch rejection before side effects, cancellation, delayed timers and execution limits.
+- Real host navigation tools, recovery from missing files and out-of-range reads, and denials disguised as lookup errors.
+- Batch rejection before side effects, cancellation, delayed timers and execution limits, including recovery attempts.
 - Model selection, use of the model's output limit, usage accounting and partial-result preservation.
 - Registration of one model-only tool and observation/shutdown hooks, without main-session continuation hooks.
 

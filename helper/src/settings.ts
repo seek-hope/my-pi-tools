@@ -23,7 +23,7 @@ export const defaults: Settings = {
   maxTurns: 20,
   maxToolCalls: 200,
   timeoutSeconds: 1200,
-  maxContextChars: 200000,
+  maxContextChars: 2000000,
 };
 export function validateSettings(value: unknown): asserts value is Settings {
   if (!Check(settingsSchema, value)) throw new Error('Invalid Helper settings');

@@ -15,7 +15,10 @@ import {
 import { registerHelper } from '../src/index.ts';
 import { message, call } from './fixtures.mjs';
 
-async function host(t, { request, child, gate, cancelChild = false, meteredRead = false }) {
+async function host(
+  t,
+  { request, child, gate, cancelChild = false, meteredRead = false, readNavigation = false },
+) {
   const cwd = mkdtempSync(join(tmpdir(), 'pi-helper-host-'));
   const agentDir = join(cwd, 'agent');
   let session,
@@ -106,6 +109,7 @@ async function host(t, { request, child, gate, cancelChild = false, meteredRead 
   const settingsManager = SettingsManager.inMemory({
     compaction: { enabled: false },
     retry: { enabled: false },
+    ...(readNavigation ? { defaultTools: ['+grep', '+find', '+ls'] } : {}),
   });
   const loader = new DefaultResourceLoader({
     cwd,
@@ -158,7 +162,7 @@ async function host(t, { request, child, gate, cancelChild = false, meteredRead 
     modelRuntime: models,
     model: models.getModel('helper-fixture', 'offline'),
     thinkingLevel: 'off',
-    tools: ['read', 'ls', 'write', 'edit', 'bash', 'helper'],
+    ...(readNavigation ? {} : { tools: ['read', 'ls', 'write', 'edit', 'bash', 'helper'] }),
     resourceLoader: loader,
     sessionManager: manager,
     settingsManager,
@@ -301,6 +305,92 @@ test(
     assert.equal(h.childCalls, 1);
   },
 );
+
+test(
+  'real SDK: configured navigation recovers a missing path and an out-of-range read',
+  { timeout: 15000 },
+  async (t) => {
+    const h = await host(t, {
+      request: { task: 'Locate original.txt and inspect before' },
+      readNavigation: true,
+      child(n, context) {
+        const declared =
+          context.tools ??
+          context.messages.flatMap((m) => (m.role === 'system' ? (m.toolsAdded ?? []) : []));
+        assert.deepEqual(declared.map((t) => t.name).sort(), ['find', 'grep', 'ls', 'read']);
+        if (n === 1) return message([call('read', { path: 'missing.txt' }, 'missing')], 'toolUse');
+        if (n === 2) {
+          assert.equal(context.messages.at(-1).isError, true);
+          assert.match(context.messages.at(-1).content[0].text, /ENOENT/);
+          return message(
+            [
+              call('ls', { path: '.' }, 'ls'),
+              call('find', { pattern: '*.txt', path: '.' }, 'find'),
+              call('grep', { pattern: 'before', path: 'original.txt' }, 'grep'),
+            ],
+            'toolUse',
+          );
+        }
+        if (n === 3) {
+          assert.match(JSON.stringify(context.messages.slice(-3)), /original.txt/);
+          assert.match(context.messages.at(-1).content[0].text, /before/);
+          return message(
+            [call('read', { path: 'original.txt', offset: 240 }, 'bad-range')],
+            'toolUse',
+          );
+        }
+        if (n === 4) {
+          assert.equal(context.messages.at(-1).isError, true);
+          assert.match(context.messages.at(-1).content[0].text, /beyond end/);
+          return message(
+            [call('read', { path: 'original.txt', offset: 1, limit: 2 }, 'corrected')],
+            'toolUse',
+          );
+        }
+        assert.equal(n, 5);
+        assert.match(context.messages.at(-1).content[0].text, /before/);
+        return message('Located original.txt and read before.');
+      },
+    });
+    assert.equal(h.result.status, 'answered', JSON.stringify(h.result));
+    assert.equal(h.result.toolCalls, 6);
+    assert.equal(h.childCalls, 5);
+    assert.equal(h.result.usage.totalTokens, 50);
+    assert.equal(h.nested.length, 6);
+  },
+);
+
+for (const tool of ['read', 'ls', 'grep', 'find'])
+  for (const terminate of [false, true])
+    test(
+      `real SDK: ${tool} permission rejection cannot masquerade as a recoverable lookup (${terminate})`,
+      { timeout: 15000 },
+      async (t) => {
+        const args = {
+          read: { path: 'original.txt' },
+          ls: { path: '.' },
+          grep: { pattern: 'before', path: '.' },
+          find: { pattern: '*.txt', path: '.' },
+        };
+        const h = await host(t, {
+          request: { task: 'Inspect local files' },
+          readNavigation: true,
+          child: () => message([call(tool, args[tool])], 'toolUse'),
+          gate: () => ({
+            block: true,
+            reason:
+              tool === 'read'
+                ? "ENOENT: no such file or directory, access '/hidden'"
+                : 'Path not found: /hidden',
+            terminate,
+          }),
+        });
+        assert.equal(h.result.status, terminate ? 'terminated' : 'error');
+        assert.equal(h.childCalls, 1);
+        assert.equal(h.nested.length, 1);
+        assert.equal(h.parentCalls, terminate ? 1 : 2);
+      },
+    );
 
 for (const hook of ['deny', 'rewrite', 'terminate'])
   test(
