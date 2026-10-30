@@ -17,7 +17,15 @@ import { message, call } from './fixtures.mjs';
 
 async function host(
   t,
-  { request, child, gate, cancelChild = false, meteredRead = false, readNavigation = false },
+  {
+    request,
+    child,
+    gate,
+    cancelChild = false,
+    meteredRead = false,
+    readNavigation = true,
+    resultGate,
+  },
 ) {
   const cwd = mkdtempSync(join(tmpdir(), 'pi-helper-host-'));
   const agentDir = join(cwd, 'agent');
@@ -38,6 +46,7 @@ async function host(
     rmSync(cwd, { recursive: true, force: true });
   });
   writeFileSync(join(cwd, 'original.txt'), 'before\n');
+  writeFileSync(join(cwd, 'rewritten.txt'), 'after\n');
   const models = await ModelRuntime.create({
     authPath: join(agentDir, 'auth.json'),
     modelsPath: null,
@@ -62,7 +71,7 @@ async function host(
     streamSimple(model, context, options) {
       const stream = createAssistantMessageEventStream();
       const isChild = JSON.stringify(context).includes(
-        'independent helper handling one explicit delegation',
+        'independent read-only helper handling one explicit delegation',
       );
       let answer;
       if (isChild) {
@@ -145,6 +154,7 @@ async function host(
         });
         pi.on('tool_result', (event) => {
           if (event.toolName === 'helper') outcomes.push(structuredClone(event));
+          if (event.parentToolCallId) return resultGate?.(event);
         });
       },
     ],
@@ -191,128 +201,11 @@ async function host(
 }
 
 test(
-  'real SDK: independent work request reads, edits, writes and runs a command through host tools',
+  'real SDK: navigation and ordinary read/grep errors are handled by the child Pi loop',
   { timeout: 15000 },
   async (t) => {
     const h = await host(t, {
-      request: {
-        mode: 'work',
-        task: 'Update original.txt and create output.txt, then verify them',
-        context: 'EXPLICIT_REQUEST_CONTEXT',
-      },
-      child(n, context) {
-        assert.match(JSON.stringify(context), /EXPLICIT_REQUEST_CONTEXT/);
-        if (n === 1) return message([call('read', { path: 'original.txt' }, 'r')], 'toolUse');
-        if (n === 2) {
-          assert.match(JSON.stringify(context), /before/);
-          return message(
-            [
-              call(
-                'edit',
-                { path: 'original.txt', edits: [{ oldText: 'before', newText: 'after' }] },
-                'e',
-              ),
-              call('write', { path: 'output.txt', content: 'created\n' }, 'w'),
-              call(
-                'bash',
-                { command: 'test -f output.txt && test "$(head -n 1 original.txt)" = after' },
-                'b',
-              ),
-            ],
-            'toolUse',
-          );
-        }
-        return message(
-          'Updated original.txt, created output.txt, and the command returned exit 0.',
-        );
-      },
-    });
-    assert.equal(h.result.status, 'answered');
-    assert.equal(h.parentCalls, 2);
-    assert.equal(h.childCalls, 3);
-    assert.equal(h.result.toolCalls, 4);
-    assert.equal(h.result.usage.totalTokens, 30);
-    assert.equal(h.event.usage.totalTokens, 30, 'nested model usage is reported once');
-    assert.equal(readFileSync(join(h.cwd, 'original.txt'), 'utf8'), 'after\n');
-    assert.equal(readFileSync(join(h.cwd, 'output.txt'), 'utf8'), 'created\n');
-    assert.ok(h.nested.every((e) => e.parentToolCallId === 'parent-call'));
-  },
-);
-
-test(
-  'real SDK: nested tool usage is counted once without mutating Helper model accounting',
-  { timeout: 15000 },
-  async (t) => {
-    const h = await host(t, {
-      request: { task: 'Read original.txt' },
-      meteredRead: true,
-      child: (n) =>
-        n === 1
-          ? message([call('read', { path: 'original.txt' })], 'toolUse')
-          : message('Read the file.'),
-    });
-    assert.equal(h.result.status, 'answered');
-    assert.equal(h.result.usage.totalTokens, 20);
-    const output = h.session.state.messages.find(
-      (m) => m.role === 'toolResult' && m.toolName === 'helper',
-    );
-    assert.equal(output.usage.totalTokens, 30);
-    assert.equal(JSON.parse(output.content[0].text).usage.totalTokens, 20);
-  },
-);
-
-test(
-  'real SDK: default read mode prevents a write even with writing tools active in the main session',
-  { timeout: 15000 },
-  async (t) => {
-    const h = await host(t, {
-      request: { task: 'Inspect files' },
-      child: () => message([call('write', { path: 'forbidden.txt', content: 'no' })], 'toolUse'),
-    });
-    assert.equal(h.result.status, 'error');
-    assert.equal(h.childCalls, 1);
-    assert.equal(h.nested.length, 0);
-    assert.equal(existsSync(join(h.cwd, 'forbidden.txt')), false);
-  },
-);
-test(
-  'real SDK: malformed JSON arguments reject the full batch before a valid earlier write',
-  { timeout: 15000 },
-  async (t) => {
-    const h = await host(t, {
-      request: { task: 'Write a file and inspect the directory', mode: 'work' },
-      child: (n) =>
-        n === 1
-          ? message(
-              [
-                call(
-                  'write',
-                  { path: 'forbidden.txt', content: 'must not persist' },
-                  'write-first',
-                ),
-                {
-                  ...call('ls', {}, 'bad-json'),
-                  argumentsError: 'The model returned malformed JSON, normalized to {}',
-                },
-              ],
-              'toolUse',
-            )
-          : message('Done'),
-    });
-    assert.equal(existsSync(join(h.cwd, 'forbidden.txt')), false);
-    assert.equal(h.result.status, 'error');
-    assert.equal(h.nested.length, 0);
-    assert.equal(h.childCalls, 1);
-  },
-);
-
-test(
-  'real SDK: configured navigation recovers a missing path and an out-of-range read',
-  { timeout: 15000 },
-  async (t) => {
-    const h = await host(t, {
-      request: { task: 'Locate original.txt and inspect before' },
-      readNavigation: true,
+      request: { task: 'Find and inspect original.txt' },
       child(n, context) {
         const declared =
           context.tools ??
@@ -321,127 +214,146 @@ test(
         if (n === 1) return message([call('read', { path: 'missing.txt' }, 'missing')], 'toolUse');
         if (n === 2) {
           assert.equal(context.messages.at(-1).isError, true);
-          assert.match(context.messages.at(-1).content[0].text, /ENOENT/);
           return message(
             [
               call('ls', { path: '.' }, 'ls'),
-              call('find', { pattern: '*.txt', path: '.' }, 'find'),
-              call('grep', { pattern: 'before', path: 'original.txt' }, 'grep'),
+              call('find', { pattern: '*.txt' }, 'find'),
+              call('grep', { pattern: '(?!before)', path: 'original.txt' }, 'regex'),
             ],
             'toolUse',
           );
         }
         if (n === 3) {
-          assert.match(JSON.stringify(context.messages.slice(-3)), /original.txt/);
-          assert.match(context.messages.at(-1).content[0].text, /before/);
+          assert.match(context.messages.at(-1).content[0].text, /look-around/);
           return message(
-            [call('read', { path: 'original.txt', offset: 240 }, 'bad-range')],
+            [
+              call('grep', { pattern: 'before', path: 'original.txt' }, 'correct'),
+              call('read', { path: 'original.txt', offset: 240 }, 'range'),
+            ],
             'toolUse',
           );
         }
         if (n === 4) {
-          assert.equal(context.messages.at(-1).isError, true);
           assert.match(context.messages.at(-1).content[0].text, /beyond end/);
           return message(
-            [call('read', { path: 'original.txt', offset: 1, limit: 2 }, 'corrected')],
+            [call('grep', { pattern: '\u0000', path: 'original.txt' }, 'nul')],
             'toolUse',
           );
         }
-        assert.equal(n, 5);
+        if (n === 5) {
+          assert.match(context.messages.at(-1).content[0].text, /null bytes/);
+          return message(
+            [call('read', { path: 'original.txt', offset: 1, limit: 2 }, 'read')],
+            'toolUse',
+          );
+        }
+        assert.equal(n, 6);
         assert.match(context.messages.at(-1).content[0].text, /before/);
-        return message('Located original.txt and read before.');
+        return message('Inspected original.txt: before.');
       },
     });
     assert.equal(h.result.status, 'answered', JSON.stringify(h.result));
-    assert.equal(h.result.toolCalls, 6);
-    assert.equal(h.childCalls, 5);
-    assert.equal(h.result.usage.totalTokens, 50);
-    assert.equal(h.nested.length, 6);
+    assert.equal(h.result.toolCalls, 8);
+    assert.equal(h.childCalls, 6);
+    assert.equal(h.result.usage.totalTokens, 60);
+    assert.equal(h.nested.length, 8);
   },
 );
 
 for (const tool of ['read', 'ls', 'grep', 'find'])
   for (const terminate of [false, true])
-    test(
-      `real SDK: ${tool} permission rejection cannot masquerade as a recoverable lookup (${terminate})`,
-      { timeout: 15000 },
-      async (t) => {
-        const args = {
-          read: { path: 'original.txt' },
-          ls: { path: '.' },
-          grep: { pattern: 'before', path: '.' },
-          find: { pattern: '*.txt', path: '.' },
-        };
-        const h = await host(t, {
-          request: { task: 'Inspect local files' },
-          readNavigation: true,
-          child: () => message([call(tool, args[tool])], 'toolUse'),
-          gate: () => ({
-            block: true,
-            reason:
-              tool === 'read'
-                ? "ENOENT: no such file or directory, access '/hidden'"
-                : 'Path not found: /hidden',
-            terminate,
-          }),
-        });
-        assert.equal(h.result.status, terminate ? 'terminated' : 'error');
-        assert.equal(h.childCalls, 1);
-        assert.equal(h.nested.length, 1);
-        assert.equal(h.parentCalls, terminate ? 1 : 2);
-      },
-    );
-
-for (const hook of ['deny', 'rewrite', 'terminate'])
-  test(
-    `real SDK: ${hook} hook is preserved, including adjusted command reporting`,
-    { timeout: 15000 },
-    async (t) => {
+    test(`real SDK: parent ${tool} denial stops even when disguised as a lookup error (${terminate})`, async (t) => {
+      const args = {
+        read: { path: 'original.txt' },
+        ls: { path: '.' },
+        grep: { pattern: 'before' },
+        find: { pattern: '*.txt' },
+      };
       const h = await host(t, {
-        request: { task: 'Create forbidden.txt with the command', mode: 'work' },
-        child(n, context) {
-          if (n === 1)
-            return message([call('bash', { command: 'touch forbidden.txt' })], 'toolUse');
-          assert.equal(hook, 'rewrite');
-          assert.match(JSON.stringify(context), /Host executed adjusted arguments/);
-          assert.match(JSON.stringify(context), /command.*true/);
-          return message(
-            'The host replaced the requested command with true; forbidden.txt was not created.',
-          );
-        },
-        gate(event) {
-          if (event.toolName !== 'bash') return;
-          if (hook === 'rewrite') {
-            event.input.command = 'true';
-            return;
-          }
-          return {
-            block: true,
-            reason: 'fixture denied',
-            ...(hook === 'terminate' ? { terminate: true } : {}),
-          };
-        },
+        request: { task: 'Inspect' },
+        child: () =>
+          message(
+            [
+              call(tool, args[tool], 'deny'),
+              call('read', { path: 'rewritten.txt' }, 'must-not-run'),
+            ],
+            'toolUse',
+          ),
+        gate: () => ({
+          block: true,
+          reason: "ENOENT: no such file or directory, access '/hidden'",
+          terminate,
+        }),
       });
-      assert.equal(existsSync(join(h.cwd, 'forbidden.txt')), false);
-      assert.equal(
-        h.result.status,
-        hook === 'rewrite' ? 'answered' : hook === 'terminate' ? 'terminated' : 'error',
-      );
-      assert.equal(h.childCalls, hook === 'rewrite' ? 2 : 1);
-      assert.equal(h.parentCalls, hook === 'terminate' ? 1 : 2);
-      assert.equal(h.result.usage.totalTokens, h.childCalls * 10);
+      assert.equal(h.result.status, terminate ? 'terminated' : 'error', JSON.stringify(h.result));
+      assert.equal(h.childCalls, 1);
       assert.equal(h.nested.length, 1);
-    },
-  );
+      assert.equal(h.parentCalls, terminate ? 1 : 2);
+    });
 
-test(
-  'real SDK: abort cancels a nested model request and retains reported usage',
-  { timeout: 15000 },
-  async (t) => {
-    const h = await host(t, { request: { task: 'Analyze' }, cancelChild: true });
-    assert.equal(h.result.status, 'cancelled');
-    assert.equal(h.result.usage.totalTokens, 10);
-    assert.equal(h.parentCalls, 1);
-    assert.equal(h.childCalls, 1);
-  },
-);
+test('real SDK: parent argument rewrites and result redaction reach the child', async (t) => {
+  const h = await host(t, {
+    request: { task: 'Inspect original.txt' },
+    gate: (event) => {
+      event.input.path = 'rewritten.txt';
+    },
+    resultGate: () => ({ content: [{ type: 'text', text: 'REDACTED' }] }),
+    child(n, context) {
+      if (n === 1) return message([call('read', { path: 'original.txt' })], 'toolUse');
+      const output = JSON.stringify(context.messages.at(-1));
+      assert.match(output, /Host executed adjusted arguments/);
+      assert.match(output, /rewritten.txt/);
+      assert.match(output, /REDACTED/);
+      assert.doesNotMatch(output, /after/);
+      return message('The host supplied a redacted result.');
+    },
+  });
+  assert.equal(h.result.status, 'answered', JSON.stringify(h.result));
+  assert.equal(readFileSync(join(h.cwd, 'original.txt'), 'utf8'), 'before\n');
+});
+
+test('real SDK: unavailable write/command tools never reach the host', async (t) => {
+  const h = await host(t, {
+    request: { task: 'Analyze only' },
+    child(n, context) {
+      if (n === 1)
+        return message(
+          [
+            call('write', { path: 'forbidden.txt', content: 'bad' }, 'write'),
+            call('bash', { command: 'touch forbidden.txt' }, 'bash'),
+          ],
+          'toolUse',
+        );
+      assert.match(JSON.stringify(context.messages.slice(-2)), /not found/);
+      return message('Only read-only inspection is available.');
+    },
+  });
+  assert.equal(h.result.status, 'answered');
+  assert.equal(h.nested.length, 0);
+  assert.equal(existsSync(join(h.cwd, 'forbidden.txt')), false);
+});
+
+test('real SDK: nested tool usage is charged once, separately from child model usage', async (t) => {
+  const h = await host(t, {
+    request: { task: 'Inspect' },
+    meteredRead: true,
+    child: (n) =>
+      n === 1 ? message([call('read', { path: 'original.txt' })], 'toolUse') : message('Done'),
+  });
+  assert.equal(h.result.status, 'answered');
+  assert.equal(h.result.usage.totalTokens, 20);
+  const stored = h.session.messages.find((m) => m.role === 'toolResult' && m.toolName === 'helper');
+  assert.equal(stored.usage.totalTokens, 30);
+  assert.equal(h.result.usage.totalTokens, 20);
+});
+
+test('real SDK: parent cancellation stops the child model', { timeout: 10000 }, async (t) => {
+  const h = await host(t, {
+    request: { task: 'Inspect' },
+    child: () => message('unused'),
+    cancelChild: true,
+  });
+  assert.equal(h.result.status, 'cancelled', JSON.stringify(h.result));
+  assert.equal(h.childCalls, 1);
+  assert.equal(h.parentCalls, 1);
+});

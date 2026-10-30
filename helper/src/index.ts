@@ -1,7 +1,7 @@
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { getAgentDir } from '@earendil-works/pi-coding-agent';
 import { loadSettings } from './settings.ts';
-import { requestSchema, resultSchema, runHelper, permittedTools } from './runner.ts';
+import { requestSchema, resultSchema, runHelper, READ_TOOLS } from './runner.ts';
 
 export function registerHelper(pi: ExtensionAPI, agentDir = getAgentDir()) {
   const active = new Map<string, { controller: AbortController; inputs: Map<string, unknown> }>();
@@ -17,13 +17,13 @@ export function registerHelper(pi: ExtensionAPI, agentDir = getAgentDir()) {
     name: 'helper',
     label: 'Helper',
     description:
-      'Delegate one explicit task to an independent helper with no parent conversation or prior helper history. Supply all needed context and file paths. Default mode=read offers only host read/grep/find/ls tools that are callable. Explicit mode=work also permits host write/edit/bash/powershell. It returns a normal answer or a partial result on failure/limits; it never resumes the main session or retries a task. Work changes persist in the shared workspace.',
+      'Delegate one explicit read-only task to a fresh, temporary Pi session. Supply the task, relevant paths and context; parent history is not inherited. Only callable host read/grep/find/ls tools are available, through the parent permission hooks. Pi manages tool errors and context compaction. Returns an answer or partial result, then disposes the session. Cannot modify files, run commands or delegate further.',
     parameters: requestSchema,
     outputSchema: resultSchema,
     executionMode: 'sequential',
     exposure: 'model-only',
-    reachesTools: (input) => permittedTools(input.mode),
-    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+    reachesTools: () => READ_TOOLS,
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     async execute(id, request, signal, onUpdate, ctx) {
       const run = { controller: new AbortController(), inputs: new Map<string, unknown>() };
       active.set(id, run);

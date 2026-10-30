@@ -1,7 +1,7 @@
 {
   "name": "my-pi-helper",
   "version": "0.1.0",
-  "description": "Independent, request-scoped assistance for Pi with read and work modes",
+  "description": "Temporary read-only Pi sessions with parent permission hooks",
   "type": "module",
   "private": true,
   "license": "MIT",

@@ -11,19 +11,13 @@ const fields = {
       ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].map((v) => Type.Literal(v)),
     ),
   ),
-  maxTurns: Type.Integer({ minimum: 1, maximum: 200 }),
-  maxToolCalls: Type.Integer({ minimum: 1, maximum: 1000 }),
   timeoutSeconds: Type.Integer({ minimum: 1, maximum: 3600 }),
-  maxContextChars: Type.Integer({ minimum: 1000, maximum: 2000000 }),
 };
 export const settingsSchema = Type.Object(fields, { additionalProperties: false });
 const partialSchema = Type.Partial(settingsSchema);
 export type Settings = Static<typeof settingsSchema>;
 export const defaults: Settings = {
-  maxTurns: 20,
-  maxToolCalls: 200,
   timeoutSeconds: 1200,
-  maxContextChars: 2000000,
 };
 export function validateSettings(value: unknown): asserts value is Settings {
   if (!Check(settingsSchema, value)) throw new Error('Invalid Helper settings');

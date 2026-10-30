@@ -1,10 +1,16 @@
 import { Type } from 'typebox';
+import { createAssistantMessageEventStream } from '@earendil-works/pi-ai';
 import { defaults } from '../src/settings.ts';
 export const model = {
   id: 'fixture',
   provider: 'offline',
   api: 'openai-completions',
+  name: 'Fixture',
   maxTokens: 4096,
+  contextWindow: 262144,
+  reasoning: true,
+  input: ['text'],
+  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
 };
 export function message(content = 'Done', stopReason = 'stop', overrides = {}) {
   return {
@@ -32,6 +38,12 @@ export const call = (name, args = {}, id = 'call-1') => ({
   arguments: args,
   id,
 });
+export function toolNames(context) {
+  return (
+    context.tools ??
+    context.messages.flatMap((m) => (m.role === 'system' ? (m.toolsAdded ?? []) : []))
+  ).map((t) => t.name);
+}
 export function fixture(responses, options = {}) {
   const contexts = [],
     executions = [],
@@ -46,36 +58,50 @@ export function fixture(responses, options = {}) {
     'bash',
     'powershell',
     'helper',
-    'goal_status',
     'codemode',
     'web_fetch',
   ].map((name) => ({ name, description: name, parameters: Type.Object({}) }));
   const ctx = {
-    cwd: '/fixture',
-    model,
+    cwd: process.cwd(),
+    model: options.model ?? model,
     thinkingLevel: 'off',
     tools,
     signal: options.signal,
     modelRegistry: {
       find: (provider, id) => options.resolve?.(provider, id),
-      streamSimple: (m, context, config) => {
+      streamSimple(m, context, config) {
         contexts.push(structuredClone(context));
         requests.push({ model: m, ...config });
-        return {
-          result: async () =>
-            typeof responses === 'function'
-              ? responses(context, config, contexts.length)
-              : responses.shift(),
-        };
+        const stream = createAssistantMessageEventStream();
+        Promise.resolve().then(async () => {
+          let answer;
+          try {
+            answer =
+              typeof responses === 'function'
+                ? await responses(context, config, contexts.length)
+                : responses.shift();
+            if (!answer) throw new Error('No fixture response remains');
+          } catch (error) {
+            answer = message('', config?.signal?.aborted ? 'aborted' : 'error', {
+              errorMessage: String(error),
+            });
+          }
+          stream.push({ type: 'start', partial: answer });
+          stream.push({ type: 'done', reason: answer.stopReason, message: answer });
+          stream.end();
+        });
+        return stream;
       },
     },
-    executeTool: async (name, args, opts) => {
+    async executeTool(name, args, opts) {
       executions.push({ name, args, signal: opts.signal });
       return options.execute
         ? options.execute(name, args, opts)
         : {
             toolCall: { id: `nested-${executions.length}`, name, arguments: args },
             result: { content: [{ type: 'text', text: 'FILE_VALUE' }], details: undefined },
+            isError: false,
+            durationMs: 0,
           };
     },
   };

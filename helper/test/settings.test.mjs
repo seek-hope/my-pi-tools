@@ -16,68 +16,56 @@ function directories(t) {
   t.after(() => rmSync(cwd, { recursive: true, force: true }));
   return { cwd, agentDir };
 }
-test('settings merge only explicit Helper files and ignore historical Goal settings', (t) => {
+test('settings load only explicit helper files and merge project over personal values', (t) => {
   const { cwd, agentDir } = directories(t);
-  writeFileSync(join(agentDir, 'my-pi-goal.json'), '{invalid retired config');
   assert.deepEqual(loadSettings(cwd, agentDir), defaults);
   writeFileSync(
     join(agentDir, 'my-pi-helper.json'),
-    JSON.stringify({ provider: 'p', model: 'm', maxTurns: 10 }),
+    JSON.stringify({ provider: 'p', model: 'm', timeoutSeconds: 60 }),
   );
-  writeFileSync(join(cwd, '.pi/my-pi-helper.json'), JSON.stringify({ maxTurns: 4 }));
-  const a = loadSettings(cwd, agentDir);
-  assert.equal(a.provider, 'p');
-  assert.equal(a.model, 'm');
-  assert.equal(a.maxTurns, 4);
-  a.maxTurns = 1;
-  assert.equal(loadSettings(cwd, agentDir).maxTurns, 4);
+  writeFileSync(join(cwd, '.pi/my-pi-helper.json'), JSON.stringify({ timeoutSeconds: 30 }));
+  assert.deepEqual(loadSettings(cwd, agentDir), { provider: 'p', model: 'm', timeoutSeconds: 30 });
 });
-test('settings accept upper bounds and reject invalid, unbounded or unknown values', (t) => {
-  assert.doesNotThrow(() =>
-    validateSettings({ ...defaults, maxTurns: 200, maxToolCalls: 1000, timeoutSeconds: 3600 }),
-  );
+test('settings keep only timeout and optional model selection; unknown limits are rejected', (t) => {
   const { cwd, agentDir } = directories(t);
   const file = join(agentDir, 'my-pi-helper.json');
+  assert.deepEqual(defaults, { timeoutSeconds: 1200 });
+  assert.doesNotThrow(() => validateSettings({ timeoutSeconds: 3600 }));
   for (const value of [
     null,
     [],
-    { maxTurns: 0 },
-    { maxTurns: null },
-    { maxTurns: 201 },
-    { maxTurns: 1.5 },
-    { provider: 'p' },
-    { provider: ' ', model: 'm' },
-    { thinking: 'invalid' },
-    { autoContinue: true },
     { timeoutSeconds: 0 },
     { timeoutSeconds: 3601 },
-    { maxToolCalls: 1001 },
+    { timeoutSeconds: 1.5 },
+    { provider: 'p' },
+    { provider: ' ', model: 'm' },
+    { thinking: 'bad' },
+    { maxTurns: 20 },
+    { maxToolCalls: 200 },
+    { maxContextChars: 2000000 },
     { maxOutputTokens: 4096 },
   ]) {
     writeFileSync(file, JSON.stringify(value));
     assert.throws(() => loadSettings(cwd, agentDir));
   }
-  writeFileSync(file, '{not json');
+  writeFileSync(file, '{invalid');
   assert.throws(() => loadSettings(cwd, agentDir), /Cannot read/);
-  for (const key of ['maxTurns', 'maxToolCalls', 'timeoutSeconds', 'maxContextChars'])
-    assert.throws(() => validateSettings({ ...defaults, [key]: Infinity }));
+  assert.throws(() => validateSettings({ timeoutSeconds: Infinity }));
 });
-test('registration adds one model-only tool and only observation/shutdown hooks', (t) => {
+test('one model-only read-only tool declares exactly the parent tools it reaches', (t) => {
   const { agentDir } = directories(t);
   const tools = [],
     events = [];
   registerHelper({ registerTool: (t) => tools.push(t), on: (name) => events.push(name) }, agentDir);
-  assert.deepEqual(
-    tools.map((t) => t.name),
-    ['helper'],
-  );
+  assert.equal(tools.length, 1);
   assert.equal(tools[0].exposure, 'model-only');
   assert.equal(tools[0].executionMode, 'sequential');
+  assert.equal(tools[0].annotations.readOnlyHint, true);
+  assert.equal(tools[0].annotations.destructiveHint, false);
+  assert.deepEqual(tools[0].reachesTools({}), ['read', 'grep', 'find', 'ls']);
   assert.deepEqual(events, ['session_shutdown', 'tool_result']);
-  assert.ok(!tools[0].reachesTools({}).includes('bash'));
-  assert.ok(tools[0].reachesTools({ mode: 'work' }).includes('bash'));
 });
-test('shutdown aborts in-flight requests and a later invocation starts fresh', async (t) => {
+test('shutdown cancels the native child and a later invocation starts fresh', async (t) => {
   const { cwd, agentDir } = directories(t);
   const events = new Map();
   let tool, entered;
@@ -101,28 +89,26 @@ test('shutdown aborts in-flight requests and a later invocation starts fresh', a
       }),
   );
   f.ctx.cwd = cwd;
-  const running = tool.execute('a', { task: 'Inspect' }, undefined, undefined, f.ctx);
+  const pending = tool.execute(
+    'a',
+    { task: 'FIRST_HELPER_PRIVATE_TASK' },
+    undefined,
+    undefined,
+    f.ctx,
+  );
   await started;
   events.get('session_shutdown')();
-  const stopped = await running;
+  const stopped = await pending;
   assert.equal(stopped.details.status, 'cancelled');
-  assert.equal(stopped.isError, true);
-  const fresh = fixture([message('Fresh answer')]);
+  const fresh = fixture([message('Fresh')]);
   fresh.ctx.cwd = cwd;
-  const next = await tool.execute('b', { task: 'Different task' }, undefined, undefined, fresh.ctx);
+  const next = await tool.execute('b', { task: 'Different' }, undefined, undefined, fresh.ctx);
   assert.equal(next.details.status, 'answered');
-  assert.equal(fresh.contexts[0].messages.length, 1);
-  assert.equal(next.details.usage.totalTokens, 10);
+  assert.doesNotMatch(JSON.stringify(fresh.contexts), /FIRST_HELPER_PRIVATE_TASK/);
   next.usage.totalTokens = 1000;
-  assert.equal(
-    next.details.usage.totalTokens,
-    10,
-    'host usage aggregation must not mutate our recorded model usage',
-  );
+  assert.equal(next.details.usage.totalTokens, 10);
 });
-test('support window accepts only the tested release pair', () => {
-  assert.doesNotThrow(() => assertSupportedPi('1.3.0'));
-  assert.doesNotThrow(() => assertSupportedPi('1.4.0'));
-  for (const version of ['1.2.0', '1.5.0', '1.4.0-dev'])
-    assert.throws(() => assertSupportedPi(version), /supports Pi/);
+test('support window remains the tested Pi pair', () => {
+  for (const v of ['1.3.0', '1.4.0']) assert.doesNotThrow(() => assertSupportedPi(v));
+  for (const v of ['1.2.0', '1.5.0', '1.4.0-dev']) assert.throws(() => assertSupportedPi(v));
 });

@@ -1,84 +1,61 @@
 # Helper design
 
-Helper handles one explicit delegation in an independent model context and returns the result to the main session. The main session decides how to use that result and whether another request is needed.
+Helper creates one temporary, read-only Pi SDK session per explicit delegation. The main session waits for the result and decides how to use it. See the [English README](README.md) or [中文说明](README.zh-CN.md) for installation and configuration.
 
-See the [English README](README.md) or [中文说明](README.zh-CN.md) for installation, invocation examples and configuration.
+## Responsibilities
 
-## Invocation
+Pi owns model/tool scheduling, argument validation, ordinary tool-error feedback, context projection, compaction and transient provider retries. Helper owns the initial task, permitted host-tool proxies, total timeout, cancellation propagation, result extraction and cleanup. There is no separate Helper conversation loop or error-message whitelist.
 
-The extension registers one `helper` tool with an explicit `task`, optional `context`, and `mode: "read" | "work"`. The default mode is `read`. The tool is model-only: the main model calls it directly. Invocations run in the foreground and use sequential execution.
+The single model-only tool accepts `task` and optional `context`, runs sequentially in the foreground, and returns an answer or partial findings. Each follow-up starts a fresh invocation.
 
-A normal model answer ends the invocation. If essential information is missing, the helper returns a question or explanation. The caller supplies any follow-up material in a new request. Helper does not automatically retry tasks, resume the main session or create persistent child sessions.
+## Session construction
 
-## Context
+`createAgentSession()` uses `SessionManager.inMemory(ctx.cwd)` and an explicit resource loader. The loader supplies a fixed Helper system prompt and empty extensions, skills, prompts, themes and AGENTS files. It never discovers project resources, MCP servers or Helper itself. The child receives no parent history, system prompt, reasoning or compaction summaries. Relevant project instructions belong in the explicit request.
 
-Each invocation constructs a new model context containing:
+Tools are the intersection of the host's callable tools with `read`, `grep`, `find` and `ls`. Each selected name has an SDK custom tool; the active tool list is explicit, including when empty. No disabled host tool gets a built-in fallback.
 
-1. A fixed Helper system prompt.
-2. The task, mode and supplementary context supplied by the caller.
-3. Definitions for the tools allowed in that invocation.
+A small native provider delegates stream requests through the parent's public model registry, retaining configured provider/authentication behavior without copying credentials or using private runtime fields. The local runtime uses an in-memory credential store and no models file. It has no long-lived resource disposal API. Virtual routing models require an explicitly configured physical Helper model because their router registrations cannot be obtained from the public registry.
 
-The helper retains its own model responses and tool results during the call. Another invocation starts with a new message buffer and does not reuse that conversation.
+The child uses in-memory Pi default settings, with cache warming and telemetry disabled. Parent settings and runtime toggles are not copied. Pi controls compaction and retries under its defaults and the model's limits.
 
-The runner does not copy the main session's messages, system prompt, hidden reasoning or compaction summaries. It does not use a child-session factory that discovers extensions, skills or context files. The caller supplies relevant project instructions explicitly.
+## Parent tool hooks
 
-Model selection, thinking level and credential resolution use the host's configured model infrastructure. The initial context contains only the inputs listed above. Workspace access does not provide filesystem isolation.
+Each child tool invokes `ctx.executeTool()` on the original parent tool context. This keeps parent validation, permission hooks, argument rewriting, result filtering and nested-call accounting in place. Child calls are sequential. Helper observes parent `tool_result` events to retrieve the actual post-hook arguments, reporting any rewrite to the child.
 
-## Tool capabilities
+The child receives filtered model-facing content and the error flag; it does not receive parent tool usage or details. Ordinary executed errors go back to Pi for model correction. An error without `durationMs` indicates that the supported Pi host rejected execution, so Helper stops. A host `terminate` request takes precedence, aborts later work and propagates to the outer tool result. There is no direct local execution path around parent checks.
 
-The tool set is the intersection of an explicit allowlist and the host's currently callable tools:
+This preserves tool hooks, not arbitrary parent session/model hooks. Host extensions and tool implementations remain trusted. Tool-name restrictions do not provide filesystem or operating-system isolation.
 
-| Mode | Eligible tools |
-| --- | --- |
-| `read` | `read`, `grep`, `find`, `ls` |
-| `work` | Read tools plus `write`, `edit`, `bash`, `powershell` |
+## Lifecycle and results
 
-Helper does not activate disabled tools; configure host `defaultTools` to add navigation tools as described in the README. The fixed prompt favors path discovery and targeted searches over guessed paths, offsets or repeated full-document reads.
+A combined signal covers tool cancellation, parent cancellation, extension shutdown and the total timeout. A timer interrupts asynchronous work; monotonic-clock checks before model requests and host tools stop new work after synchronous code delays the timer. Native retry backoff and summarization are cancelled through `session.abort()`. All created sessions are aborted, unsubscribed and disposed in cleanup. Cancellation depends on provider/tool cooperation.
 
-The runner copies tool definitions into the model context and sends every execution through `ctx.executeTool`. Native argument validation, permission hooks, cancellation and termination remain in effect. Host tool-result events supply the arguments actually executed after hook rewrites.
+After `session.prompt()` settles, the latest raw persisted assistant attempt determines status. Using the model-facing projection here would lose failures omitted by native overflow recovery. The latest nonempty raw assistant text supplies the answer or partial output. Successful results omit raw tool diagnostics. Returned answers and last-tool excerpts have a 32,000-character ceiling; reasons have a 4,000-character ceiling. A truncated answer is `limited`.
 
-Before any member of a tool batch runs, the runner checks the available tool names, schemas, SDK argument-parsing errors and call IDs. Invalid or reused IDs reject the batch. Known file-lookup and read-range errors can be appended as `isError: true` tool results, allowing the model to correct its request within the existing budgets. Recovery requires both an allowlisted read-only error message and a finite nonnegative `AgentToolCallOutcome.durationMs`. In Pi 1.3/1.4 this timing field is absent when validation or a permission hook prevents execution; denial text alone never authorizes recovery. The whitelist covers `read` ENOENT/ENOTDIR/EISDIR and out-of-range offsets, plus `ls` reporting a non-directory path. Generic navigation-tool 'Path not found' errors remain fatal because Pi also uses that text for OS access failures. Unknown errors, work-tool errors, permission denials and non-text results remain fatal. Cancellation and host termination take precedence over recovery, and termination is propagated to the main tool result.
+The statuses are `answered`, `error`, `cancelled`, `limited` and `terminated`. Only `answered` has `partial: false`; it describes a model answer, not independent task verification. There is no Helper turn/tool/context budget. Pi manages model context, and Helper retains the configurable total timeout.
 
-Tool implementations and host extensions are trusted. Work-mode changes remain in the shared workspace; Helper does not provide rollback or an operating-system sandbox.
+## Usage
 
-## Limits and cancellation
+The forwarding provider observes each stream's final result without consuming its events. It counts every reported model usage once, including compaction, summary retries and failed or cancelled attempts that never produce a persisted summary. It does not separately sum session entries, which would duplicate successful requests and omit unsuccessful summary attempts.
 
-Settings bound model requests, tool calls, elapsed time and serialized context size. The default context budget is 2,000,000 characters, not tokens; the model's own context window remains a separate limit. Context is not automatically compacted. Defaults and allowed ranges are listed in the [configuration reference](README.md#configuration). Each model request uses the selected model's own output-token limit. Tool-result excerpts and returned answers have separate character limits.
+Missing/invalid usage and failed, aborted or unresolved requests mark accounting incomplete. Valid components remain available even when aggregate fields are absent or overflow. Optional reasoning and cache-retention breakdowns are subsets and do not increase totals. The tracker returns a snapshot; parent aggregation cannot mutate the Helper result.
 
-A model request may use the last tool result to produce an answer after the tool-call allowance is exhausted, provided the other limits permit it. Any further tool batch is rejected. On the last allowed model turn, tool calls are rejected because no later model request could consume their results.
-
-Tool, session, shutdown and deadline cancellation signals are combined. A timer aborts pending work, and monotonic-clock checks between operations prevent further actions when synchronous code has delayed the timer. Cancellation is cooperative with providers and host tools; it does not forcibly interrupt arbitrary extension code.
-
-## Results and usage
-
-Results distinguish normal answers, errors, cancellation, limits and host termination. A normal answer is assistance; the main session assesses whether the overall task is complete.
-
-Partial runs retain the latest nonempty model text and last available tool result, with truncation marked explicitly. Successful answers omit raw tool-result bodies so inspected files are not unnecessarily replayed into the caller's context.
-
-Usage records the helper's model requests. Known components are retained when aggregate fields are missing, and incomplete or invalid usage is marked. Optional reasoning and cache-retention breakdowns are accumulated without increasing totals twice. Pi accounts for nested-tool usage separately; the extension returns a copy of model usage so host aggregation does not mutate the recorded result.
+Parent nested-tool usage is accounted by Pi. Forwarding it into the child would charge it twice, so child tool results omit usage. Native turn events and forwarded host calls are exposed as diagnostic counts, not budgets.
 
 ## Implementation
 
 | File | Responsibility |
 | --- | --- |
-| [extensions/index.ts](extensions/index.ts) | Pi extension entry and supported-version check |
-| [src/index.ts](src/index.ts) | Tool registration, shutdown handling and observation of executed arguments |
-| [src/runner.ts](src/runner.ts) | Independent model context, bounded execution, host tool routing and result accounting |
-| [src/settings.ts](src/settings.ts) | Defaults, validation and personal/project configuration loading |
+| [extensions/index.ts](extensions/index.ts) | Extension entry and supported-version check |
+| [src/index.ts](src/index.ts) | Registration, shutdown cancellation and executed-argument observation |
+| [src/session.ts](src/session.ts) | Isolated native session, resource policy and provider forwarding |
+| [src/runner.ts](src/runner.ts) | Read-only proxies, deadline, status/output extraction and cleanup |
+| [src/usage.ts](src/usage.ts) | Request usage tracking and safe aggregation |
+| [src/settings.ts](src/settings.ts) | Timeout/model configuration and validation |
 | [src/compatibility.ts](src/compatibility.ts) | Supported Pi release pair |
-
-The runner calls `ctx.modelRegistry.streamSimple` with its own context. The package has no runtime dependency on the repository's CodeGraph or Search packages.
 
 ## Verification
 
-Offline provider fixtures and real Pi SDK tests cover:
+Tests use real Pi sessions and offline providers. They cover context/resource isolation, unavailable tool fallback, native error correction, host deny/rewrite/filter/terminate hooks, independent invocations, model selection, compaction/retry, cancellation/deadlines, cleanup and usage. Recovery tests exercise failures omitted from the native projection and summary usage that is not persisted. No test depends on paid provider access.
 
-- Absence of parent-session sentinels from provider requests and presence of explicitly supplied material.
-- Tool-result retention within one invocation and independent state across invocations.
-- Read-only capability boundaries, allowed work-mode edits and commands, and native deny/rewrite/terminate hooks.
-- Real host navigation tools, recovery from missing files and out-of-range reads, and denials disguised as lookup errors.
-- Batch rejection before side effects, cancellation, delayed timers and execution limits, including recovery attempts.
-- Model selection, use of the model's output limit, usage accounting and partial-result preservation.
-- Registration of one model-only tool and observation/shutdown hooks, without main-session continuation hooks.
-
-The [compatibility script](scripts/check-compat.mjs) checks types, the full Helper suite and isolated extension loading against both supported Pi releases. CI runs the repository checks with Node 22 and 24. These checks validate runtime behavior and integration, not model-answer quality.
+The [compatibility script](scripts/check-compat.mjs) checks types, the complete suite and isolated extension loading on Pi 1.3.0 and 1.4.0. CI covers Node 22 and 24. These tests validate integration behavior, not answer quality or operating-system isolation.

@@ -1,68 +1,37 @@
-# my-pi-helper
+# Pi Helper
 
-Request-scoped assistance for Pi with an independent model context. The main session sends a task and any necessary context; Helper uses the allowed host tools and returns an answer. Each invocation starts fresh.
+[中文说明](README.zh-CN.md) · [Design](DESIGN.md)
 
-[中文说明](README.zh-CN.md) · [Design and boundaries](DESIGN.md)
+Delegate one explicit read-only task to a fresh, temporary Pi session. Pi manages the model loop, ordinary tool errors, context compaction and provider retries. Every file tool runs through the main session's permission hooks. The child returns its answer or partial findings and is disposed.
 
-## Install
+Supports **Pi 1.3.0 and 1.4.0** and Node.js ≥ 22.19. This package is independent of CodeGraph and Search.
 
-Requires Node.js **22.19+** and Pi **1.3.0 or 1.4.0**. This package is independent of the repository's CodeGraph and Search packages and is not published to npm.
-
-From the repository root:
+## Install and invoke
 
 ```bash
 pi install ./helper
 ```
 
-Use `pi install -l /absolute/path/my-pi-tools/helper` for project-local installation. To try it without changing configuration:
-
-```bash
-pi -e /absolute/path/my-pi-tools/helper/extensions/index.ts
-```
-
-For a running Pi session, use `/reload` after updating the installed extensions.
-
-## Delegate a task
-
-Ask the main model to use `helper`, or have it issue these tool arguments. `helper` is a **model-only** orchestration tool: the main model calls it directly; it is not callable from codemode or another tool.
-
-Read-only review:
+Use `/reload` in an existing Pi session. Helper is a model-only tool called by the main model:
 
 ```json
 {
-  "task": "Review src/export.ts for Unicode filename handling. Report concrete defects with file and line references.",
-  "context": "Expected behavior: preserve Unicode filenames in the downloaded archive. Inspect the code independently; do not change files."
+  "task": "Review src/export.ts for Unicode filename handling. Return concrete issues with file locations.",
+  "context": "Expected behavior: downloaded archives preserve original filenames."
 }
 ```
 
-Explicit work delegation:
+`task` must be nonblank and at most 20,000 characters. Optional `context` is at most 120,000 characters. These are the only accepted request fields. Supply paths, relevant project rules and supporting material explicitly.
 
-```json
-{
-  "mode": "work",
-  "task": "Fix the Unicode filename defect in src/export.ts and run the relevant existing tests.",
-  "context": "Keep the exported API unchanged. Follow the project formatting rules. Relevant tests are in test/export.test.ts. Return the changed files, checks run and unresolved issues."
-}
-```
+Each call creates an in-memory SDK session in the main session's working directory. It receives a fixed Helper prompt, explicit task/context, and available tool definitions. It does not copy the main conversation, system prompt, reasoning or compaction summaries, or reuse another Helper conversation. It does not discover `AGENTS.md`, skills, prompt templates, extensions or MCP servers. The caller supplies relevant instructions in `context`.
 
-| Argument | Meaning |
-| --- | --- |
-| `task` | Required nonempty task, up to 20,000 characters |
-| `context` | Optional material and constraints, up to 120,000 characters |
-| `mode` | `read` by default; explicitly choose `work` to permit writes and commands |
-
-Supply paths, requirements, relevant project instructions and any prior result needed for a follow-up. Helper receives none of the main conversation automatically. Missing information is returned as an ordinary question or explanation; another call must include the necessary material explicitly.
+Calls run in the foreground, sequentially. There is no TUI, saved child transcript, background queue, recursive delegation or automatic continuation of the main conversation. A follow-up is a new explicit call.
 
 ## Tools and permissions
 
-Helper selects an explicit subset of the host's currently callable tools:
+The available tools are the intersection of `read`, `grep`, `find`, `ls` and the main session's currently callable tools. There are no writing, editing or command tools. Unavailable host tools have no local fallback.
 
-| Mode | Eligible tools |
-| --- | --- |
-| `read` | `read`, `grep`, `find`, `ls` |
-| `work` | Read tools plus `write`, `edit`, `bash`, `powershell` |
-
-Only tools actually exposed by the host are included. Helper does not enable disabled tools. With Pi's default tool selection, read mode may have only `read`. For file discovery and targeted searches, merge this into the project's `.pi/settings.json` (not `my-pi-helper.json`), preserving any existing tool choices:
+With Pi's default tool selection, Helper may have only `read`. For discovery and targeted searches, merge this into the project's `.pi/settings.json`, preserving existing tool choices:
 
 ```json
 {
@@ -70,66 +39,62 @@ Only tools actually exposed by the host are included. Helper does not enable dis
 }
 ```
 
-Use `/reload` in a session using the default tool selection, or restart Pi. Explicit `--tools` selections must also include these tools. These settings expose navigation tools in the host as well as Helper; they do not expand Helper's read-mode allowlist. Prefer discovery and search before reading narrow ranges.
+Use `/reload` with the default tool selection, or restart Pi. Explicit `--tools` selections must include these tools too. This setting exposes navigation tools in the main session as well as Helper.
 
-Every tool invocation uses Pi's `ctx.executeTool`, preserving native validation, permission hooks and cancellation. Rewritten arguments observed in host tool-result events are reported to the helper. Known file-lookup and read-range errors from an actually executed read-only tool are returned to the model as error results so it can correct the path or range within the same invocation. Corrections consume the existing budgets; Helper does not automatically restart a task or retry provider failures. Permission denials, unknown errors, failed work tools and unsupported non-text results still stop the invocation with an error and the last tool's output. A host `terminate` request stops Helper and is propagated to the main tool result. Changes already made in work mode remain in the shared workspace; there is no rollback.
+Child tools are thin proxies to the parent's `ctx.executeTool()`. Parent validation, permission checks, argument rewrites, result filtering, cancellation and termination remain active. The child receives the filtered content and a notice when the host rewrites arguments. This preserves tool hooks; it does not load parent extensions or copy their other session hooks into the child.
 
-Tool access is limited to the names above. Tool implementations and host extensions are trusted: replacing a conventional read tool with a writing implementation would violate the read-mode assumption. Context separation is not an operating-system or filesystem sandbox.
+Ordinary executed tool errors, including a missing file, an invalid read range or an unsupported grep regex, are returned to Pi as tool errors. The model can correct its request. Helper does not maintain an error-message whitelist. A parent rejection before execution stops the invocation; in the supported Pi releases this is identified by an error outcome without `durationMs`. Host `terminate` takes precedence and is propagated to the main tool result.
 
-## Results and stopping
+Tool implementations and host extensions are trusted. A custom tool named `read` must actually be read-only. This is a tool capability boundary and separate model context, not an operating-system or filesystem sandbox.
 
-Results include `status`, `mode`, `model`, `output`, `reason`, `partial`, `turns`, `toolCalls`, `toolsUsed`, `usage`, `usageIncomplete`, and truncation flags. For a partial run where a tool returned, `lastTool` contains its name and a bounded output excerpt. Successful answers omit this raw tool output to avoid replaying inspected files into the caller's context.
+## Session management and limits
+
+Pi owns conversation growth, context compaction and transient provider retries. The child uses **Pi's built-in settings defaults**, including enabled compaction and retries; it does not inherit personal/project Pi settings or runtime toggles. Cache warming and install/analytics telemetry are disabled for the child. Compaction uses the selected model's context window and incurs model usage. Recovery gives the model a chance to continue; it does not guarantee a correct answer or recovery from every provider error.
+
+Helper applies a total timeout, checked with a timer and monotonic-clock checkpoints before model requests and host tool calls. Cancellation from the tool, parent session, shutdown or timeout aborts the child, including native retry backoff and summarization. Cleanup awaits abort and disposes the session. Cancellation is cooperative: a provider or host tool that ignores its abort signal can delay completion. No process is forcibly killed.
+
+Returned answers and diagnostic tool excerpts are bounded to 32,000 characters, with explicit truncation. An oversized answer is a partial `limited` result. Child tool content is handled by Pi and the host tools; the diagnostic excerpt does not impose a separate context budget. There is no Helper turn, tool-call or serialized-context limit, and the timeout is not a token or monetary budget.
+
+## Results and usage
+
+Results include `status`, `model`, `output`, `reason`, `partial`, `turns`, `toolCalls`, `toolsUsed`, `usage`, `usageIncomplete` and `outputTruncated`. Partial results may include `lastTool` with its name, error flag and bounded text excerpt. Successful answers omit that raw excerpt.
 
 | Status | Meaning |
 | --- | --- |
-| `answered` | The model returned a normal final answer, possibly explaining missing information |
-| `error` | Model/tool failure, denied or malformed action, or unsupported non-text output |
-| `cancelled` | Tool/session cancellation, shutdown or model abort |
-| `limited` | Turn, tool-call, time, context, output-token or answer-size limit |
+| `answered` | A normal final answer, including an explanation of missing evidence |
+| `error` | Provider/session failure, host rejection, or no normal final answer |
+| `cancelled` | Caller, session, shutdown or model cancellation |
+| `limited` | Timeout, unrecovered model output limit or oversized answer |
 | `terminated` | A host tool requested termination |
 
-Invalid invocation arguments or settings can be rejected before a Helper result exists; Pi reports these as ordinary tool errors.
+`answered` is a model response, not independent verification of the overall task. Other statuses have `partial: true`. The latest nonempty assistant text is retained when possible; it may be an intermediate finding. Invalid arguments or settings can be rejected before a result exists.
 
-`answered` means a model answer was returned, not that the user's overall task has been independently verified. Other statuses have `partial: true`; the latest nonempty model text and last tool output are retained when available.
+Status is determined from the latest persisted assistant attempt, including failures that Pi omits from its model-facing context during recovery. `turns` counts native `turn_start` events, including a turn cancelled before its provider request; summarization requests are separate. `toolCalls` counts forwarded parent calls, including parent rejections, and `toolsUsed` lists their unique names.
 
-`usage` records Helper's model calls; Pi adds nested-tool usage separately. Missing or invalid provider usage is marked `usageIncomplete`, not treated as verified zero cost. Missing aggregate counts and costs fall back to the known components; unrepresentable totals remain partial rather than overflowing. Optional `reasoning` and `cacheWrite1h` breakdowns accumulate when reported; they are subsets of existing token counts and do not increase totals or costs. `turns` counts model requests started, excluding cancellation during a progress update.
-
-A normal final answer ends the invocation. Missing information is returned to the caller, which can supply it in another explicit request. Helper does not automatically retry tasks or resume the main session, and each invocation has its own conversation.
-
-At the last allowed model turn, further tool calls are not executed without a remaining opportunity to consume their results. Tool batches are validated before any member runs, including SDK argument-parsing errors and missing, malformed or reused call IDs. Exhausting the tool-call budget still permits a model request to interpret the last result and answer, within the remaining turn, time and context limits; any further tool batch is rejected.
-
-Each invocation has a cancellable deadline, also checked against a monotonic clock between operations so a delayed timer cannot start further work after expiry. Cancellation is cooperative with host tools and providers; Helper does not provide process isolation or forcibly terminate arbitrary extension code. The model-turn limit is finite even when a model repeatedly asks to use tools.
+Usage is observed at the model forwarding boundary, so normal requests, compaction, failed attempts and summary retries are counted once, even if no summary is saved. Missing, invalid, failed or aborted request accounting is marked `usageIncomplete`. Known components survive missing aggregates; reasoning/cache-retention breakdowns do not increase totals twice. Pi adds nested host-tool usage separately. Helper does not replay that usage through the child or mutate its own recorded totals during host aggregation.
 
 ## Configuration
 
-Optional settings are read from:
+Optional Helper settings are read from:
 
 1. `<Pi agent directory>/my-pi-helper.json`
 2. `<workspace>/.pi/my-pi-helper.json`, overriding personal values
 
 ```json
 {
-  "maxTurns": 20,
-  "maxToolCalls": 200,
-  "timeoutSeconds": 1200,
-  "maxContextChars": 2000000
+  "timeoutSeconds": 1200
 }
 ```
 
-| Setting | Default | Allowed range |
+| Setting | Default | Values |
 | --- | --- | --- |
-| `maxTurns` | 20 | 1–200 model requests |
-| `maxToolCalls` | 200 | 1–1,000 tool calls |
-| `timeoutSeconds` | 1,200 | 1–3,600 seconds |
-| `maxContextChars` | 2,000,000 | 1,000–2,000,000 characters in the serialized context, including tools |
+| `timeoutSeconds` | 1,200 | Integer, 1–3,600 seconds |
+| `provider`, `model` | Main session's model | Nonblank configured identifiers; set both together |
+| `thinking` | Main session's thinking level | `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max` |
 
-Each model request uses the selected model's own maximum output-token allowance (`model.maxTokens`). The separate 32,000-character returned-answer limit still applies.
+Requests use the host's public model registry, retaining configured providers and request-time authentication without copying credentials. This integration requires a **physical model**. If the main session selects a virtual routing model, configure Helper's `provider` and `model` to a concrete model; virtual routing registrations are not exposed through the registry for reuse in the child.
 
-The 2M default means 2,000,000 characters in the serialized context, not tokens. The model's own context window still applies; this limit does not enlarge it or compact the context. It is not an exact token or monetary budget. Each model request is metered by the provider, including replayed inputs.
-
-Optional `provider` and `model` select a different configured model; set both together. Otherwise Helper uses the current main model's identity. Optional `thinking` is `off`, `minimal`, `low`, `medium`, `high`, `xhigh` or `max`; otherwise it uses the current thinking level. Only model configuration and credential resolution are reused, never the conversation or hidden reasoning.
-
-Unknown settings, invalid limits and incomplete model configuration are rejected. Tool-output excerpts and answers are limited to 32,000 characters with explicit truncation; request narrower output or smaller read ranges for more detail. Helper supports text outputs, foreground calls and fresh contexts.
+Unknown settings, invalid ranges and incomplete model selection are rejected. Helper's configuration does not alter the main session's settings.
 
 ## Development and verification
 
@@ -141,8 +106,8 @@ npm --prefix helper run check:format
 npm --prefix helper run check:compat
 ```
 
-`check:compat` uses installed releases from `~/.pi/agent/install/releases` by default; pass another releases directory after `--` if needed. It copies the package into temporary directories and checks types, the full suite and isolated extension loading on both supported Pi releases, without relinking a live installation.
+`check:compat` uses releases in `~/.pi/agent/install/releases` by default; pass another directory after `--` if needed. It copies this package into temporary directories to check types, the complete suite and isolated extension loading against both supported Pi versions without changing a live installation. CI covers Node 22 and 24.
 
-The native navigation tests require `rg` and `fd` (or `fdfind`) on `PATH` or in Pi's tools directory; CI installs `ripgrep` and `fd-find` and disables automatic downloads. Tests use offline providers with the actual Pi SDK. They capture provider inputs to check context separation; exercise fresh calls, cancellation, limits and usage accounting; perform real file edits and command execution; and test host deny/rewrite/terminate hooks. CI runs Node 22 and 24 with Pi 1.3.0 and 1.4.0. These tests cover runtime behavior and integration; they do not evaluate model-answer quality or provide formal verification.
+Real SDK tests use offline providers and temporary files. They cover native navigation/error recovery, fresh contexts, disabled resource discovery, tool restrictions, parent deny/rewrite/filter/terminate hooks, compaction, retry, cancellation, cleanup, partial results and usage. Native navigation tests need `rg` and `fd` (or `fdfind`); CI installs them and disables automatic downloads. These tests validate integration behavior, not model-answer quality.
 
 [MIT](../LICENSE)
