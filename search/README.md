@@ -2,10 +2,10 @@
 
 Pi 扩展：把 **DeepSeek Search & Fetch API** 与 **Exa Search & Contents API** 合并为 `web_search` 和 `web_fetch` 两个工具。
 
-- `web_search` → DeepSeek `/v1/tools/search` 和/或 Exa `/search`：返回排序后的网页结果（标题、URL、摘要、站点、日期）。
-  - `provider="auto"`（默认）查询所有已配置 provider；两者都可用时用 reciprocal rank fusion 合并去重。
-  - `provider="both"` 要求两个 provider 都可用；`"deepseek"` / `"exa"` 限定单一来源。
-- `web_fetch` → DeepSeek `/v1/tools/fetch` 或 Exa `/contents`：抓取单个页面，返回标题与 Markdown 正文。默认优先 DeepSeek；DeepSeek 不可用或抓取失败时静默回退 Exa。
+- `web_search`：查询 DeepSeek `/v1/tools/search` 和/或 Exa `/search`，返回标题、URL、摘要、站点、日期等排序结果。
+- `web_fetch`：通过 DeepSeek `/v1/tools/fetch` 或 Exa `/contents` 抓取单个页面，返回标题与 Markdown 正文。
+
+来源选择与失败回退规则见[使用](#使用)。
 
 至少配置一个 API Key：`DEEPSEEK_API_KEY` 或 `EXA_API_KEY`。与当前选中的模型无关（任何 Pi 模型都能调用这两个工具）。Exa 通过 REST API 接入，不依赖 Exa MCP。
 
@@ -33,11 +33,11 @@ pi -e /absolute/path/to/my-pi-tools/search/src/index.ts
 
 ## 配置
 
-所有配置都通过环境变量，缺省值可直接使用。
+行为配置通过环境变量设置，API Key 也可从 Pi 凭据文件读取。未设置的选项使用表中默认值。
 
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
-| `DEEPSEEK_API_KEY` | — | 可选；与 `EXA_API_KEY` 至少配置一个。未设置时回退读取 `~/.pi/agent/auth.json` 中 `deepseek` 凭据 |
+| `DEEPSEEK_API_KEY` | — | 可选；与 `EXA_API_KEY` 至少配置一个。未设置时读取 Pi `auth.json` 中的 `deepseek` API Key |
 | `DEEPSEEK_BASE_URL` / `DEEPSEEK_SEARCH_BASE_URL` | `https://api.deepseek.com` | API 基地址（可指向代理）；远程地址必须使用 HTTPS |
 | `DEEPSEEK_WEB_ALLOW_INSECURE_BASE_URL` | `false` | 允许非回环 HTTP API 基地址；会明文发送 API key，仅限受控环境 |
 | `DEEPSEEK_SEARCH_TIMEOUT_MS` | `20000` | 单次请求超时（1s–300s） |
@@ -55,12 +55,14 @@ pi -e /absolute/path/to/my-pi-tools/search/src/index.ts
 | `DEEPSEEK_WEB_ALLOW_PRIVATE_HOSTS` | `false` | 允许抓取私网/回环地址（仅限受控环境） |
 | `DEEPSEEK_WEB_SPILL` | `true` | 截断时把全文写入临时文件；定期清理超过 24 小时或超过 100 个的旧文件 |
 | `DEEPSEEK_WEB_DEBUG` | `false` | 向 stderr 输出请求/重试日志 |
-| `EXA_API_KEY` | — | 可选；与 `DEEPSEEK_API_KEY` 至少配置一个。未设置时回退读取 `~/.pi/agent/auth.json` 中 `exa` 凭据 |
+| `EXA_API_KEY` | — | 可选；与 `DEEPSEEK_API_KEY` 至少配置一个。未设置时读取 Pi `auth.json` 中的 `exa` API Key |
 | `EXA_BASE_URL` | `https://api.exa.ai` | Exa API 基地址；远程地址必须使用 HTTPS |
 | `EXA_SEARCH_TYPE` | `auto` | Exa 搜索模式，例如 `auto`、`lite`、`deep`、`deep-lite` |
 | `EXA_WEB_ALLOW_INSECURE_BASE_URL` | `false` | 允许非回环 HTTP Exa 基地址；会明文发送 API key |
 
 `DEEPSEEK_SEARCH_TIMEOUT_MS`、重试、缓存、结果体积和 `DEEPSEEK_WEB_ALLOW_PRIVATE_HOSTS` 对两个 provider 共用；搜索与抓取缓存按 provider 独立。
+
+凭据文件默认为 `~/.pi/agent/auth.json`，设置 `PI_CODING_AGENT_DIR` 时使用该目录下的 `auth.json`。仅支持 `type: "api_key"` 的静态 Key，不执行 `!命令` 形式的凭据。
 
 ## 使用
 
@@ -76,9 +78,9 @@ pi -e /absolute/path/to/my-pi-tools/search/src/index.ts
 - **合并去重**：按规范化 URL 去重，用 reciprocal rank fusion 排序；每条结果标记 `deepseek`、`exa` 或两者。单个 provider 不可用或失败时静默使用另一个 provider 的结果；在 TUI/RPC 中会提示用户检查 search 配置，但不会把 warning 写进模型结果。
 - **抓取回退**：`web_fetch` 的 `auto` 优先 DeepSeek；遇到认证、限流、超时或网络错误时静默回退 Exa，不向模型追加 warning。`blocked_url`、参数错误和调用方取消不会触发回退。
 - **先摘要后正文**：`web_search` 默认 `need_content=false`，只返回摘要；需要细节时对具体 URL 调用 `web_fetch`，省 token。
-- **结果截断**：`web_fetch` 超过预算时会截断，并把完整内容写到 `/tmp/pi-deepseek-web/*.md`，模型可用 `read` 按 offset/limit 继续读。
-- **缓存**：相同 query/URL 在 TTL 内直接命中；同一 provider 的并发重复请求会合并为一次上游调用。
-- **错误可读**：认证失败、限流、超时、私网地址等都会变成简短的错误文本（含 `kind` 与提示），不会中断会话。
+- **结果截断**：超过字节或行数预算时截断。默认将全文写入系统临时目录下的 `pi-deepseek-web/*.md`；以结果返回的路径为准，可用 `read` 的 offset/limit 继续读取。设置 `DEEPSEEK_WEB_SPILL=false` 可关闭全文保存。
+- **缓存**：相同参数的请求在 TTL 内复用结果；同一 provider 的并发重复请求会合并为一次上游调用。
+- **错误结果**：认证失败、限流、超时或被阻止的 URL 返回带 `kind` 和提示的工具错误，供模型或调用方处理。
 
 ### 示例：直接验证 API（不经 Pi）
 
@@ -118,7 +120,7 @@ curl -s https://api.exa.ai/search \
 - 解析 DNS 后拒绝回环、私网、链路本地、CGNAT、保留段、组播，以及 IPv4-mapped / NAT64 / 6to4 中嵌入的私网地址；
 - 识别 `2130706433`、`0x7f.1`、`0177.0.0.1` 等历史 IPv4 写法。
 
-**残余风险**：`web_fetch` 的实际抓取由 DeepSeek 或 Exa 服务完成；本地 DNS 校验只决定是否把 URL 交给所选上游，不能约束上游侧的解析结果。它用于阻止把明显的回环、私网或元数据地址发给上游，不等价于网络层出站策略。高安全环境请配合出站防火墙/代理白名单，或设置 `DEEPSEEK_WEB_ALLOW_PRIVATE_HOSTS=false`（默认）并禁止解析到内网。
+实际页面抓取由 DeepSeek 或 Exa 完成。本地 DNS 检查决定是否将 URL 交给上游，无法约束上游的解析或抓取过程，因此不等价于上游的网络出站控制。`DEEPSEEK_WEB_ALLOW_PRIVATE_HOSTS=false` 是默认防护设置，不能消除这一边界。
 
 ## 计费
 
@@ -126,18 +128,20 @@ curl -s https://api.exa.ai/search \
 
 ## 开发与验证
 
+在仓库根目录执行：
+
 ```bash
-npm install
-npm run typecheck
-npm test
+npm --prefix search ci --ignore-scripts
+npm --prefix search run typecheck
+npm --prefix search test
 ```
 
 测试完全离线：使用本地 mock HTTP 服务器覆盖请求形状、重试/超时/取消、错误映射、缓存、single-flight、SSRF、截断与临时文件溢出。
 
-真实 API 冒烟（需要 Key）：
+真实 API smoke 需要 Key，并可能产生搜索/抓取费用：
 
 ```bash
-npm run smoke
+npm --prefix search run smoke
 ```
 
 `scripts/smoke.ts` 会按已配置的 provider 依次验证：search 返回结果、fetch 返回正文、SSRF 守卫拦截云元数据地址。只配置一个 Key 时只测试该 provider。

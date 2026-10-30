@@ -1,10 +1,10 @@
 # pi-codegraph
 
-将 [colbymchenry/codegraph](https://github.com/colbymchenry/codegraph) 接入 pi 的 TypeScript 扩展。
+将 [colbymchenry/codegraph](https://github.com/colbymchenry/codegraph) 接入 Pi 的 TypeScript 扩展。
 
-使用 pi **原生 MCP**：扩展注册 `codegraph serve --mcp`，由 pi 管理连接、工具发现、调用、取消、结果截断和重连。无需 `pi-mcp-adapter`，不复制 CodeGraph 的工具 schema，也不把它作为 npm 运行时依赖打包。
+扩展通过 Pi **原生 MCP** 注册 `codegraph serve --mcp`，由 Pi 管理连接、工具发现、调用、取消、结果截断和重连。无需额外 MCP 适配器，CodeGraph CLI 需单独安装。
 
-已验证：**pi 1.4.0（peer 声明为 ≥ 1.3.0）、CodeGraph 1.6.2、Node.js 22.23.3、Linux**。开发环境要求 Node.js ≥ 22.19；其他平台未进行实机验证。旧版 pi 若没有 `registerMcpServer`，加载时会提示升级。
+要求 Node.js **≥ 22.19**、Pi **≥ 1.3.0**。开发依赖为 Pi **1.4.0**，CI 使用 CodeGraph **1.6.2**，覆盖 Linux 上的 Node 22/24；其他平台暂无测试覆盖。缺少 `registerMcpServer` 的 Pi 版本会在加载时提示升级。
 
 ## 快速开始
 
@@ -30,7 +30,7 @@ npm install -g @colbymchenry/codegraph@1.6.2
 pi install ./codegraph
 ```
 
-这是由你手动执行的安装步骤，会将包路径写入 pi 的个人配置。只想为当前项目安装，可用 `pi install -l /绝对路径/my-pi-tools/codegraph`。
+安装会将包路径写入 Pi 个人配置。仅为当前项目安装可用 `pi install -l /绝对路径/my-pi-tools/codegraph`。
 
 也可以只在一次会话中加载，不写配置：
 
@@ -125,7 +125,7 @@ PI_CODEGRAPH_EXPOSURE=direct pi
 | `PI_CODEGRAPH_TIMEOUT` | `120` | MCP 单次请求和短 CLI 命令超时，秒，范围 1–3600；MCP progress 通知按 pi 规则重置超时 |
 | `PI_CODEGRAPH_COMMAND_TIMEOUT` | `900` | `init` / `sync` 超时，秒，范围 1–86400 |
 
-> `init` / `sync` 的默认超时是 15 分钟。大型仓库首次索引可能更久，可在启动 pi 前提高 `PI_CODEGRAPH_COMMAND_TIMEOUT`（最大 86400 秒）。
+大型仓库首次索引可能超过默认的 15 分钟，可在启动 Pi 前提高 `PI_CODEGRAPH_COMMAND_TIMEOUT`。
 
 示例：
 

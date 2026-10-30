@@ -14,7 +14,7 @@ The single model-only tool accepts `task` and optional `context`, runs sequentia
 
 Tools are the intersection of the host's callable tools with `read`, `grep`, `find` and `ls`. Each selected name has an SDK custom tool; the active tool list is explicit, including when empty. No disabled host tool gets a built-in fallback.
 
-A small native provider delegates stream requests through the parent's public model registry, retaining configured provider/authentication behavior without copying credentials or using private runtime fields. The local runtime uses an in-memory credential store and no models file. It has no long-lived resource disposal API. Virtual routing models require an explicitly configured physical Helper model because their router registrations cannot be obtained from the public registry.
+A small native provider delegates stream requests through the parent's public model registry, retaining configured provider/authentication behavior without copying credentials or using private runtime fields. The local runtime uses an in-memory credential store and no models file. The runtime has no disposal API; session cleanup is described below. Virtual routing models require an explicitly configured concrete Helper model because their router registrations cannot be obtained from the public registry.
 
 The child uses in-memory Pi default settings, with cache warming and telemetry disabled. Parent settings and runtime toggles are not copied. Pi controls compaction and retries under its defaults and the model's limits.
 
@@ -28,11 +28,9 @@ This preserves tool hooks, not arbitrary parent session/model hooks. Host extens
 
 ## Lifecycle and results
 
-A combined signal covers tool cancellation, parent cancellation, extension shutdown and the total timeout. A timer interrupts asynchronous work; monotonic-clock checks before model requests and host tools stop new work after synchronous code delays the timer. Native retry backoff and summarization are cancelled through `session.abort()`. All created sessions are aborted, unsubscribed and disposed in cleanup. Cancellation depends on provider/tool cooperation.
+A combined signal covers tool cancellation, parent cancellation, extension shutdown and the total timeout. A timer interrupts asynchronous work; monotonic-clock checks before model requests and host tools stop new work after synchronous code delays the timer. Native retry backoff and summarization are cancelled through `session.abort()`. All created sessions are aborted, unsubscribed and disposed in cleanup. The first cancellation or timeout cause is retained even if cleanup crosses the deadline; host termination takes precedence. Cancellation depends on provider/tool cooperation.
 
-After `session.prompt()` settles, the latest raw persisted assistant attempt determines status. Using the model-facing projection here would lose failures omitted by native overflow recovery. The latest nonempty raw assistant text supplies the answer or partial output. Successful results omit raw tool diagnostics. Returned answers and last-tool excerpts have a 32,000-character ceiling; reasons have a 4,000-character ceiling. A truncated answer is `limited`.
-
-The statuses are `answered`, `error`, `cancelled`, `limited` and `terminated`. Only `answered` has `partial: false`; it describes a model answer, not independent task verification. There is no Helper turn/tool/context budget. Pi manages model context, and Helper retains the configurable total timeout.
+After `session.prompt()` settles, the latest raw persisted assistant attempt determines status. Using the model-facing projection here would lose failures omitted by native overflow recovery. The latest nonempty raw assistant text supplies the answer or partial output. Successful results omit raw tool diagnostics. Truncation and partial status follow the [public result contract](README.md#results-and-usage); output field limits are listed under [Session management and limits](README.md#session-management-and-limits). Pi manages model context, while Helper retains the configurable total timeout.
 
 ## Usage
 
@@ -40,7 +38,7 @@ The forwarding provider observes each stream's final result without consuming it
 
 Missing/invalid usage and failed, aborted or unresolved requests mark accounting incomplete. Valid components remain available even when aggregate fields are absent or overflow. Optional reasoning and cache-retention breakdowns are subsets and do not increase totals. The tracker returns a snapshot; parent aggregation cannot mutate the Helper result.
 
-Parent nested-tool usage is accounted by Pi. Forwarding it into the child would charge it twice, so child tool results omit usage. Native turn events and forwarded host calls are exposed as diagnostic counts, not budgets.
+Parent nested-tool usage is accounted by Pi. Forwarding it into the child would count it twice, so child tool results omit usage. Native turn events and forwarded host calls are exposed as diagnostic counts, not budgets.
 
 ## Implementation
 
@@ -56,6 +54,6 @@ Parent nested-tool usage is accounted by Pi. Forwarding it into the child would 
 
 ## Verification
 
-Tests use real Pi sessions and offline providers. They cover context/resource isolation, unavailable tool fallback, native error correction, host deny/rewrite/filter/terminate hooks, independent invocations, model selection, compaction/retry, cancellation/deadlines, cleanup and usage. Recovery tests exercise failures omitted from the native projection and summary usage that is not persisted. No test depends on paid provider access.
+Tests use real Pi sessions and offline providers. They cover context/resource isolation, native error correction, host deny/rewrite/filter/terminate hooks, independent invocations, model selection, compaction/retry, cancellation/deadlines, cleanup and usage. They also verify that unavailable host tools have no local fallback. Recovery tests exercise failures omitted from the native projection and summary usage that is not persisted. No test depends on paid provider access.
 
 The [compatibility script](scripts/check-compat.mjs) checks types, the complete suite and isolated extension loading on Pi 1.3.0 and 1.4.0. CI covers Node 22 and 24. These tests validate integration behavior, not answer quality or operating-system isolation.
