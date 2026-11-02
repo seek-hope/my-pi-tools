@@ -4,7 +4,7 @@
 
 将一个明确的只读任务委派给临时 Pi 会话。Pi 负责模型循环、普通工具错误处理、上下文压缩和 provider 重试；所有文件工具仍经过主会话权限 hook。返回回答或部分结果后，子会话会被清理。
 
-支持 **Pi 1.4.0 / 1.5.0**，要求 Node.js ≥ 22.19。这个包与 CodeGraph、Search 相互独立。
+要求 **Pi ≥ 1.5.0** 稳定版和 Node.js ≥ 22.19，不设 Pi 版本上限。Pi 升级后先检查兼容性，仅在发现不兼容时调整实现或最低版本要求。这个包与 CodeGraph、Search 相互独立。
 
 ## 安装与调用
 
@@ -108,7 +108,7 @@ npm --prefix helper run check:format
 npm --prefix helper run check:compat
 ```
 
-`check:compat` 默认使用 `~/.pi/agent/install/releases` 的安装版本，也可以在 `--` 后指定其他目录。它将包复制到临时目录，分别检查两个 Pi 版本的类型、完整测试和独立扩展加载，不修改当前安装。CI 覆盖 Node 22 和 24。
+`check:compat` 自动发现 `~/.pi/agent/install/releases` 中符合最低要求的已安装 Pi 稳定版。在 `--` 后可指定其他目录，再列出需要检查的已安装版本。它将包复制到临时目录，检查类型、完整测试和独立扩展加载，不修改当前安装；没有匹配版本时会报错。CI 在 Node 22/24 上检查最低版本与最新稳定版，并记录实际测试版本。Pi 发布新版本不需要例行修改 manifest 或文档。
 
 测试使用真实 SDK、离线 provider 和临时文件。导航测试需要 `rg` 和 `fd`（或 `fdfind`）；CI 安装这些工具并禁用自动下载。覆盖范围见[验证设计](DESIGN.md#verification)。测试验证集成行为，不评价模型回答质量。
 

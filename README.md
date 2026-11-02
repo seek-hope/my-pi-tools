@@ -12,7 +12,7 @@
 
 ## 环境与安装
 
-要求 Node.js **≥ 22.19**。Helper 支持 Pi **1.4.0 / 1.5.0**；CodeGraph 的 peer 范围为 `>=1.3.0`，Search 为 `*`，具体测试范围见各包文档。CodeGraph CLI 使用 **1.6.2**。CI 覆盖 Linux，其他平台暂无测试覆盖。
+要求 Node.js **≥ 22.19**。Helper 支持 Pi **≥ 1.5.0** 稳定版；CodeGraph 的 peer 范围为 `>=1.3.0`，Search 为 `*`，具体测试范围见各包文档。CodeGraph CLI 使用 **1.6.2**。CI 覆盖 Linux，其他平台暂无测试覆盖。
 
 在仓库根目录执行需要的安装命令：
 
@@ -87,7 +87,7 @@ npm --prefix helper run check:format
 npm --prefix helper run check:compat
 ```
 
-`check:compat` 使用本机安装的 Pi 1.4.0 / 1.5.0，在临时目录检查 Helper 类型、完整测试和独立扩展加载。[CI](.github/workflows/ci.yml) 对三个包运行 Node 22/24 × Pi 1.4.0/1.5.0 的类型检查、测试和独立加载，并分别在两个 Pi 版本上运行真实 Pi/CodeGraph smoke。
+`check:compat` 自动发现本机安装的 Pi ≥ 1.5.0 稳定版，在临时目录检查 Helper 类型、完整测试和独立扩展加载。[CI](.github/workflows/ci.yml) 对三个包检查 Pi 1.5.0 基线与最新稳定版，在 Node 22/24 上运行类型检查、测试和独立加载，并运行真实 Pi/CodeGraph smoke。
 
 ## 文档导航
 

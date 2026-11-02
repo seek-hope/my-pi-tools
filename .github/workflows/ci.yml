@@ -20,7 +20,7 @@ jobs:
       fail-fast: false
       matrix:
         node: ["22.x", "24.x"]
-        pi: ["1.4.0", "1.5.0"]
+        pi: ["1.5.0", "latest"]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -44,11 +44,21 @@ jobs:
       - name: Install Helper dependencies
         working-directory: helper
         run: npm ci --ignore-scripts --no-audit --no-fund
-      - name: Select Pi host version for all extensions
+      - name: Resolve Pi host version
+        id: pi
+        env:
+          PI_VERSION_SPEC: ${{ matrix.pi }}
         run: |
-          npm --prefix codegraph install --no-save --package-lock=false --ignore-scripts --no-audit --no-fund @earendil-works/pi-coding-agent@${{ matrix.pi }}
-          npm --prefix search install --no-save --package-lock=false --ignore-scripts --no-audit --no-fund @earendil-works/pi-coding-agent@${{ matrix.pi }} @earendil-works/pi-tui@${{ matrix.pi }}
-          npm --prefix helper install --no-save --package-lock=false --ignore-scripts --no-audit --no-fund @earendil-works/pi-ai@${{ matrix.pi }} @earendil-works/pi-coding-agent@${{ matrix.pi }}
+          version=$(npm view "@earendil-works/pi-coding-agent@$PI_VERSION_SPEC" version)
+          printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
+          printf 'Testing Pi %s\n' "$version"
+      - name: Select Pi host version for all extensions
+        env:
+          PI_TEST_VERSION: ${{ steps.pi.outputs.version }}
+        run: |
+          npm --prefix codegraph install --no-save --package-lock=false --ignore-scripts --no-audit --no-fund "@earendil-works/pi-coding-agent@$PI_TEST_VERSION"
+          npm --prefix search install --no-save --package-lock=false --ignore-scripts --no-audit --no-fund "@earendil-works/pi-coding-agent@$PI_TEST_VERSION" "@earendil-works/pi-tui@$PI_TEST_VERSION"
+          npm --prefix helper install --no-save --package-lock=false --ignore-scripts --no-audit --no-fund "@earendil-works/pi-ai@$PI_TEST_VERSION" "@earendil-works/pi-coding-agent@$PI_TEST_VERSION"
       - name: Typecheck and test
         env:
           PI_OFFLINE: "1"
@@ -75,7 +85,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pi: ["1.4.0", "1.5.0"]
+        pi: ["1.5.0", "latest"]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -88,9 +98,19 @@ jobs:
       - name: Install extension dependencies
         working-directory: codegraph
         run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Resolve Pi host version
+        id: pi
+        env:
+          PI_VERSION_SPEC: ${{ matrix.pi }}
+        run: |
+          version=$(npm view "@earendil-works/pi-coding-agent@$PI_VERSION_SPEC" version)
+          printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
+          printf 'Testing Pi %s\n' "$version"
       - name: Select Pi host version
         working-directory: codegraph
-        run: npm install --no-save --package-lock=false --ignore-scripts --no-audit --no-fund @earendil-works/pi-coding-agent@${{ matrix.pi }}
+        env:
+          PI_TEST_VERSION: ${{ steps.pi.outputs.version }}
+        run: npm install --no-save --package-lock=false --ignore-scripts --no-audit --no-fund "@earendil-works/pi-coding-agent@$PI_TEST_VERSION"
       - name: Run real Pi and CodeGraph smoke test
         working-directory: codegraph
         run: npm run smoke

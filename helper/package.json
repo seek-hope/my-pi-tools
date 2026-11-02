@@ -16,8 +16,8 @@
     "check:compat": "node scripts/check-compat.mjs"
   },
   "peerDependencies": {
-    "@earendil-works/pi-ai": "1.4.0 || 1.5.0",
-    "@earendil-works/pi-coding-agent": "1.4.0 || 1.5.0",
+    "@earendil-works/pi-ai": ">=1.5.0",
+    "@earendil-works/pi-coding-agent": ">=1.5.0",
     "typebox": "*"
   },
   "devDependencies": {
@@ -25,6 +25,5 @@
     "prettier": "^3.8.1",
     "typescript": "^5.9.3"
   },
-  "engines": { "node": ">=22.19.0" },
-  "piCompatibility": { "current": "1.5.0", "previous": "1.4.0" }
+  "engines": { "node": ">=22.19.0" }
 }

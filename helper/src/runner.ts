@@ -1,3 +1,4 @@
+import type { Usage } from '@earendil-works/pi-ai';
 import type {
   AgentSession,
   ExtensionToolContext,
@@ -6,7 +7,7 @@ import type {
 import { Type, type Static } from 'typebox';
 import { Check } from 'typebox/value';
 import { createHelperSession } from './session.ts';
-import { emptyUsage, type Usage } from './usage.ts';
+import { emptyUsage } from './usage.ts';
 import { validateSettings, type Settings } from './settings.ts';
 
 export const READ_TOOLS = ['read', 'grep', 'find', 'ls'] as const;

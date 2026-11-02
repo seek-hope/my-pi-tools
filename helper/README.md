@@ -4,7 +4,7 @@
 
 Delegate one explicit read-only task to a fresh, temporary Pi session. Pi manages the model loop, ordinary tool errors, context compaction and provider retries. Every file tool runs through the main session's permission hooks. The child returns its answer or partial findings and is disposed.
 
-Supports **Pi 1.4.0 and 1.5.0** and Node.js ≥ 22.19. This package is independent of CodeGraph and Search.
+Requires stable **Pi ≥ 1.5.0** and Node.js ≥ 22.19, with no Pi version ceiling. Check compatibility after Pi upgrades; change the implementation or minimum requirement only when an incompatibility is found. This package is independent of CodeGraph and Search.
 
 ## Install and invoke
 
@@ -108,7 +108,7 @@ npm --prefix helper run check:format
 npm --prefix helper run check:compat
 ```
 
-`check:compat` uses releases in `~/.pi/agent/install/releases` by default; pass another directory after `--` if needed. It copies this package into temporary directories to check types, the complete suite and isolated extension loading against both supported Pi versions without changing a live installation. CI covers Node 22 and 24.
+`check:compat` discovers installed stable Pi releases meeting the minimum requirement in `~/.pi/agent/install/releases`. Pass another directory after `--`, optionally followed by specific installed versions. It copies this package into temporary directories to check types, the complete suite and isolated extension loading without changing a live installation; no matching releases is an error. CI checks the minimum version and the latest stable release on Node 22 and 24, logging the resolved version. A new Pi release does not require a routine manifest or documentation update.
 
 Tests use the real SDK with offline providers and temporary files. Navigation tests require `rg` and `fd` (or `fdfind`); CI installs them and disables automatic downloads. See [Verification](DESIGN.md#verification) for coverage. Tests validate integration behavior, not model-answer quality.
 

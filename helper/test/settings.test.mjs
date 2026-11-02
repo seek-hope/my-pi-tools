@@ -5,7 +5,6 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { loadSettings, defaults, validateSettings } from '../src/settings.ts';
 import { registerHelper } from '../src/index.ts';
-import { assertSupportedPi } from '../src/compatibility.ts';
 import { fixture, message } from './fixtures.mjs';
 
 function directories(t) {
@@ -107,8 +106,4 @@ test('shutdown cancels the native child and a later invocation starts fresh', as
   assert.doesNotMatch(JSON.stringify(fresh.contexts), /FIRST_HELPER_PRIVATE_TASK/);
   next.usage.totalTokens = 1000;
   assert.equal(next.details.usage.totalTokens, 10);
-});
-test('support window remains the tested Pi pair', () => {
-  for (const v of ['1.4.0', '1.5.0']) assert.doesNotThrow(() => assertSupportedPi(v));
-  for (const v of ['1.3.0', '1.6.0', '1.5.0-dev']) assert.throws(() => assertSupportedPi(v));
 });

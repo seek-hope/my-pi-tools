@@ -50,10 +50,10 @@ Parent nested-tool usage is accounted by Pi. Forwarding it into the child would 
 | [src/runner.ts](src/runner.ts) | Read-only proxies, deadline, status/output extraction and cleanup |
 | [src/usage.ts](src/usage.ts) | Request usage tracking and safe aggregation |
 | [src/settings.ts](src/settings.ts) | Timeout/model configuration and validation |
-| [src/compatibility.ts](src/compatibility.ts) | Supported Pi release pair |
+| [src/compatibility.ts](src/compatibility.ts) | Minimum stable Pi version derived from the peer dependency |
 
 ## Verification
 
 Tests use real Pi sessions and offline providers. They cover context/resource isolation, native error correction, host deny/rewrite/filter/terminate hooks, independent invocations, model selection, compaction/retry, cancellation/deadlines, cleanup and usage. They also verify that unavailable host tools have no local fallback. Recovery tests exercise failures omitted from the native projection and summary usage that is not persisted. No test depends on paid provider access.
 
-The [compatibility script](scripts/check-compat.mjs) checks types, the complete suite and isolated extension loading on Pi 1.4.0 and 1.5.0. CI covers Node 22 and 24. These tests validate integration behavior, not answer quality or operating-system isolation.
+The [compatibility script](scripts/check-compat.mjs) discovers installed stable releases satisfying the Pi peer dependency and checks types, the complete suite and isolated extension loading. The version gate enforces only the minimum, with no release allowlist or upper bound. CI checks the minimum version and the latest stable release on Node 22 and 24. Upgrades require compatibility checks; implementation or requirement changes follow actual incompatibilities. These tests validate integration behavior, not answer quality or operating-system isolation.

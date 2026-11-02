@@ -12,12 +12,24 @@ import { dirname, join, resolve } from 'node:path';
 import { homedir, tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { supportedPi } from '../src/compatibility.ts';
+import { assertSupportedPi, isSupportedPi, minimumPiVersion } from '../src/compatibility.ts';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const releases = resolve(process.argv[2] ?? join(homedir(), '.pi/agent/install/releases'));
+const requested = [...new Set(process.argv.slice(3))];
+for (const version of requested) assertSupportedPi(version);
+const versions = requested.length
+  ? requested
+  : readdirSync(releases, { withFileTypes: true })
+      .filter(
+        (entry) => (entry.isDirectory() || entry.isSymbolicLink()) && isSupportedPi(entry.name),
+      )
+      .map((entry) => entry.name)
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+if (versions.length === 0)
+  throw new Error(`No installed stable Pi releases >=${minimumPiVersion} found in ${releases}`);
 let failed = false;
-for (const version of [supportedPi.previous, supportedPi.current]) {
+for (const version of versions) {
   const cwd = mkdtempSync(join(tmpdir(), 'pi-helper-compat-'));
   try {
     for (const file of [
@@ -26,6 +38,7 @@ for (const version of [supportedPi.previous, supportedPi.current]) {
       'tsconfig.json',
       'src',
       'extensions',
+      'scripts',
       'test',
     ])
       cpSync(join(root, file), join(cwd, file), { recursive: true });

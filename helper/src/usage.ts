@@ -1,9 +1,4 @@
-import type { AssistantMessageEventStream, Usage as PiUsage } from '@earendil-works/pi-ai';
-
-// Pi 1.5 adds this optional field; retain it when running on Pi 1.4 as well.
-export type Usage = PiUsage & {
-  cost: PiUsage['cost'] & { totalFromProvider?: boolean };
-};
+import type { AssistantMessageEventStream, Usage } from '@earendil-works/pi-ai';
 
 export function emptyUsage(): Usage {
   return {
