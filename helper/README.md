@@ -4,7 +4,7 @@
 
 Delegate one explicit read-only task to a fresh, temporary Pi session. Pi manages the model loop, ordinary tool errors, context compaction and provider retries. Every file tool runs through the main session's permission hooks. The child returns its answer or partial findings and is disposed.
 
-Supports **Pi 1.3.0 and 1.4.0** and Node.js ≥ 22.19. This package is independent of CodeGraph and Search.
+Supports **Pi 1.4.0 and 1.5.0** and Node.js ≥ 22.19. This package is independent of CodeGraph and Search.
 
 ## Install and invoke
 

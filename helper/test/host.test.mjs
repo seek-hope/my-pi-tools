@@ -24,6 +24,7 @@ async function host(
     cancelChild = false,
     meteredRead = false,
     readNavigation = true,
+    invalidRequest = false,
     resultGate,
   },
 ) {
@@ -187,11 +188,11 @@ async function host(
   assert.ok(JSON.stringify(parents).includes('PARENT_SYSTEM_PRIVATE_72691'));
   assert.ok(JSON.stringify(parents).includes('PARENT_HISTORY_PRIVATE_13987'));
   assert.equal(session.isStreaming, false);
-  assert.equal(outcomes.length, 1);
+  assert.equal(outcomes.length, invalidRequest ? 0 : 1);
   return {
     session,
     cwd,
-    result: outcomes[0].structuredContent,
+    result: outcomes[0]?.structuredContent,
     event: outcomes[0],
     parentCalls,
     childCalls,
@@ -345,6 +346,44 @@ test('real SDK: nested tool usage is charged once, separately from child model u
   const stored = h.session.messages.find((m) => m.role === 'toolResult' && m.toolName === 'helper');
   assert.equal(stored.usage.totalTokens, 30);
   assert.equal(h.result.usage.totalTokens, 20);
+});
+
+test('real SDK: tool schemas reject invalid arguments and coerce numeric strings before parent hooks', async (t) => {
+  const h = await host(t, {
+    request: { task: 'Inspect original.txt' },
+    child(n, context) {
+      if (n === 1)
+        return message([call('read', { path: { invalid: true } }, 'invalid')], 'toolUse');
+      if (n === 2) {
+        assert.equal(context.messages.at(-1).isError, true);
+        return message(
+          [call('read', { path: 'original.txt', offset: '1', limit: '1' }, 'coerced')],
+          'toolUse',
+        );
+      }
+      assert.equal(n, 3);
+      assert.match(context.messages.at(-1).content[0].text, /before/);
+      return message('Inspected after correcting arguments.');
+    },
+  });
+  assert.equal(h.result.status, 'answered');
+  assert.equal(h.nested.length, 1, 'invalid call never reaches the parent');
+  assert.deepEqual(h.nested[0].input, { path: 'original.txt', offset: 1, limit: 1 });
+});
+
+test('real SDK: undeclared Helper request fields are rejected before a child starts', async (t) => {
+  const h = await host(t, {
+    request: { task: 'Inspect', mode: 'work' },
+    invalidRequest: true,
+    child: () => {
+      throw new Error('invalid delegation must not create a child request');
+    },
+  });
+  const stored = h.session.messages.find((m) => m.role === 'toolResult' && m.toolName === 'helper');
+  assert.equal(stored.isError, true);
+  assert.equal(h.result, undefined);
+  assert.equal(h.childCalls, 0);
+  assert.equal(h.nested.length, 0);
 });
 
 test('real SDK: parent cancellation stops the child model', { timeout: 10000 }, async (t) => {

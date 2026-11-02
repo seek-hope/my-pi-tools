@@ -109,6 +109,6 @@ test('shutdown cancels the native child and a later invocation starts fresh', as
   assert.equal(next.details.usage.totalTokens, 10);
 });
 test('support window remains the tested Pi pair', () => {
-  for (const v of ['1.3.0', '1.4.0']) assert.doesNotThrow(() => assertSupportedPi(v));
-  for (const v of ['1.2.0', '1.5.0', '1.4.0-dev']) assert.throws(() => assertSupportedPi(v));
+  for (const v of ['1.4.0', '1.5.0']) assert.doesNotThrow(() => assertSupportedPi(v));
+  for (const v of ['1.3.0', '1.6.0', '1.5.0-dev']) assert.throws(() => assertSupportedPi(v));
 });

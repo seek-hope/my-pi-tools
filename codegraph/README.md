@@ -4,7 +4,7 @@
 
 扩展通过 Pi **原生 MCP** 注册 `codegraph serve --mcp`，由 Pi 管理连接、工具发现、调用、取消、结果截断和重连。无需额外 MCP 适配器，CodeGraph CLI 需单独安装。
 
-要求 Node.js **≥ 22.19**、Pi **≥ 1.3.0**。开发依赖为 Pi **1.4.0**，CI 使用 CodeGraph **1.6.2**，覆盖 Linux 上的 Node 22/24；其他平台暂无测试覆盖。缺少 `registerMcpServer` 的 Pi 版本会在加载时提示升级。
+要求 Node.js **≥ 22.19**、Pi **≥ 1.3.0**。开发依赖为 Pi **1.5.0**，CI 使用 CodeGraph **1.6.2**，覆盖 Linux 上的 Node 22/24 与 Pi 1.4.0/1.5.0；其他平台暂无测试覆盖。缺少 `registerMcpServer` 的 Pi 版本会在加载时提示升级。
 
 ## 快速开始
 

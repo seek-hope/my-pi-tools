@@ -1,4 +1,9 @@
-import type { AssistantMessageEventStream, Usage } from '@earendil-works/pi-ai';
+import type { AssistantMessageEventStream, Usage as PiUsage } from '@earendil-works/pi-ai';
+
+// Pi 1.5 adds this optional field; retain it when running on Pi 1.4 as well.
+export type Usage = PiUsage & {
+  cost: PiUsage['cost'] & { totalFromProvider?: boolean };
+};
 
 export function emptyUsage(): Usage {
   return {
@@ -7,7 +12,7 @@ export function emptyUsage(): Usage {
     cacheRead: 0,
     cacheWrite: 0,
     totalTokens: 0,
-    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0, totalFromProvider: false },
   };
 }
 export function addUsage(total: Usage, next: Usage | undefined): boolean {
@@ -52,6 +57,7 @@ export function addUsage(total: Usage, next: Usage | undefined): boolean {
 export function createUsageTracker() {
   const usage = emptyUsage();
   let incomplete = false;
+  let allCostsFromProvider = true;
   let pending = 0;
   return {
     track(request: () => AssistantMessageEventStream) {
@@ -61,21 +67,37 @@ export function createUsageTracker() {
         void stream.result().then(
           (message) => {
             pending--;
-            const known = addUsage(usage, message.usage);
+            const reported = message.usage as Usage | undefined;
+            const known = addUsage(usage, reported);
+            allCostsFromProvider &&= known && reported?.cost?.totalFromProvider === true;
+            usage.cost.totalFromProvider = allCostsFromProvider;
             incomplete ||= !known || ['error', 'aborted'].includes(message.stopReason);
           },
           () => {
             pending--;
             incomplete = true;
+            allCostsFromProvider = false;
+            usage.cost.totalFromProvider = false;
           },
         );
         return stream;
       } catch (error) {
         pending--;
         incomplete = true;
+        allCostsFromProvider = false;
+        usage.cost.totalFromProvider = false;
         throw error;
       }
     },
-    snapshot: () => ({ usage: structuredClone(usage), usageIncomplete: incomplete || pending > 0 }),
+    snapshot: () => ({
+      usage: {
+        ...usage,
+        cost: {
+          ...usage.cost,
+          totalFromProvider: pending === 0 && usage.cost.totalFromProvider === true,
+        },
+      },
+      usageIncomplete: incomplete || pending > 0,
+    }),
   };
 }

@@ -36,7 +36,7 @@ After `session.prompt()` settles, the latest raw persisted assistant attempt det
 
 The forwarding provider observes each stream's final result without consuming its events. It counts every reported model usage once, including compaction, summary retries and failed or cancelled attempts that never produce a persisted summary. It does not separately sum session entries, which would duplicate successful requests and omit unsuccessful summary attempts.
 
-Missing/invalid usage and failed, aborted or unresolved requests mark accounting incomplete. Valid components remain available even when aggregate fields are absent or overflow. Optional reasoning and cache-retention breakdowns are subsets and do not increase totals. The tracker returns a snapshot; parent aggregation cannot mutate the Helper result.
+Missing/invalid usage and failed, aborted or unresolved requests mark accounting incomplete. Valid components remain available even when aggregate fields are absent or overflow. Optional reasoning and cache-retention breakdowns are subsets and do not increase totals. `cost.totalFromProvider` is true only when every contributing request reports a valid provider-billed total and the combined usage is valid; mixed estimates, missing usage and unfinished requests leave it false. The tracker returns a snapshot; parent aggregation cannot mutate the Helper result.
 
 Parent nested-tool usage is accounted by Pi. Forwarding it into the child would count it twice, so child tool results omit usage. Native turn events and forwarded host calls are exposed as diagnostic counts, not budgets.
 
@@ -56,4 +56,4 @@ Parent nested-tool usage is accounted by Pi. Forwarding it into the child would 
 
 Tests use real Pi sessions and offline providers. They cover context/resource isolation, native error correction, host deny/rewrite/filter/terminate hooks, independent invocations, model selection, compaction/retry, cancellation/deadlines, cleanup and usage. They also verify that unavailable host tools have no local fallback. Recovery tests exercise failures omitted from the native projection and summary usage that is not persisted. No test depends on paid provider access.
 
-The [compatibility script](scripts/check-compat.mjs) checks types, the complete suite and isolated extension loading on Pi 1.3.0 and 1.4.0. CI covers Node 22 and 24. These tests validate integration behavior, not answer quality or operating-system isolation.
+The [compatibility script](scripts/check-compat.mjs) checks types, the complete suite and isolated extension loading on Pi 1.4.0 and 1.5.0. CI covers Node 22 and 24. These tests validate integration behavior, not answer quality or operating-system isolation.

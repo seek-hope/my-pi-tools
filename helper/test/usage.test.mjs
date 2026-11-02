@@ -30,7 +30,8 @@ test('malformed or overflowing usage is marked incomplete and remains JSON-safe'
   assert.equal(r.usageIncomplete, true);
   for (const key of ['input', 'output', 'cacheRead', 'cacheWrite', 'totalTokens'])
     assert.ok(Number.isSafeInteger(r.usage[key]));
-  for (const cost of Object.values(r.usage.cost)) assert.ok(Number.isFinite(cost));
+  for (const key of ['input', 'output', 'cacheRead', 'cacheWrite', 'total'])
+    assert.ok(Number.isFinite(r.usage.cost[key]));
   assert.deepEqual(JSON.parse(JSON.stringify(r.usage)), r.usage);
 });
 

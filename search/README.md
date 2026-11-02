@@ -29,7 +29,7 @@ pi install -l /absolute/path/to/my-pi-tools/search
 pi -e /absolute/path/to/my-pi-tools/search/src/index.ts
 ```
 
-本扩展是多文件 TypeScript 模块，不要只复制 `index.ts`。在已经运行的 Pi 中安装后执行 `/reload`。当前开发和测试使用 **Pi 1.4.0**，manifest 中的 Pi peer 范围为 `*`；这不表示所有版本均已验证。
+本扩展是多文件 TypeScript 模块，不要只复制 `index.ts`。在已经运行的 Pi 中安装后执行 `/reload`。当前开发依赖为 **Pi 1.5.0**，CI 覆盖 Pi 1.4.0 / 1.5.0。manifest 中的 Pi peer 范围为 `*`；这不表示所有版本均已验证。
 
 ## 配置
 
