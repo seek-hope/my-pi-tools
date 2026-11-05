@@ -5,6 +5,8 @@ Pi 扩展：把 **DeepSeek Search & Fetch API** 与 **Exa Search & Contents API*
 - `web_search`：查询 DeepSeek `/v1/tools/search` 和/或 Exa `/search`，返回标题、URL、摘要、站点、日期等排序结果。
 - `web_fetch`：通过 DeepSeek `/v1/tools/fetch` 或 Exa `/contents` 抓取单个页面，返回标题与 Markdown 正文。
 
+两个工具均使用 `direct` exposure，支持模型直接调用；启用 codemode 后，也可以通过 `tools.web_search()` 和 `tools.web_fetch()` 调用。
+
 来源选择与失败回退规则见[使用](#使用)。
 
 至少配置一个 API Key：`DEEPSEEK_API_KEY` 或 `EXA_API_KEY`。与当前选中的模型无关（任何 Pi 模型都能调用这两个工具）。Exa 通过 REST API 接入，不依赖 Exa MCP。

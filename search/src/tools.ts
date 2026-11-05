@@ -387,6 +387,7 @@ export function registerWebTools(pi: ExtensionAPI, deps: WebToolDeps): void {
 			"Prefer a short, specific query and follow up with web_fetch on the most relevant URL.",
 		],
 		parameters: SEARCH_PARAMS,
+		exposure: "direct",
 		executionMode: "parallel",
 
 		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
@@ -541,6 +542,7 @@ export function registerWebTools(pi: ExtensionAPI, deps: WebToolDeps): void {
 			"If the result is truncated, read the saved temp file with offset/limit instead of refetching.",
 		],
 		parameters: FETCH_PARAMS,
+		exposure: "direct",
 		executionMode: "parallel",
 
 		async execute(_toolCallId, params, signal, _onUpdate, _ctx) {

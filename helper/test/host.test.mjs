@@ -7,6 +7,7 @@ import { Type } from 'typebox';
 import { createAssistantMessageEventStream } from '@earendil-works/pi-ai';
 import {
   createAgentSession,
+  createCodemodeExtension,
   DefaultResourceLoader,
   ModelRuntime,
   SessionManager,
@@ -25,6 +26,7 @@ async function host(
     meteredRead = false,
     readNavigation = true,
     invalidRequest = false,
+    viaCodemode = false,
     resultGate,
   },
 ) {
@@ -106,7 +108,20 @@ async function host(
         assert.ok(parentCalls <= 2, 'Helper must never trigger main-session continuation');
         answer =
           parentCalls === 1
-            ? message([call('helper', request, 'parent-call')], 'toolUse')
+            ? message(
+                [
+                  call(
+                    viaCodemode ? 'codemode' : 'helper',
+                    viaCodemode
+                      ? {
+                          code: `text(await tools.helper(${JSON.stringify(request)})); text('AFTER_HELPER');`,
+                        }
+                      : request,
+                    'parent-call',
+                  ),
+                ],
+                'toolUse',
+              )
             : message('Main session is done.');
       }
       answer = { ...answer, api: model.api, provider: model.provider, model: model.id };
@@ -119,7 +134,10 @@ async function host(
   const settingsManager = SettingsManager.inMemory({
     compaction: { enabled: false },
     retry: { enabled: false },
-    ...(readNavigation ? { defaultTools: ['+grep', '+find', '+ls'] } : {}),
+    defaultTools: [
+      ...(readNavigation ? ['+grep', '+find', '+ls'] : []),
+      ...(viaCodemode ? ['+codemode'] : []),
+    ],
   });
   const loader = new DefaultResourceLoader({
     cwd,
@@ -132,6 +150,7 @@ async function host(
     noContextFiles: true,
     systemPromptOverride: () => 'PARENT_SYSTEM_PRIVATE_72691',
     extensionFactories: [
+      ...(viaCodemode ? [createCodemodeExtension({ mode: 'on' })] : []),
       (pi) => {
         if (meteredRead)
           pi.registerTool({
@@ -149,13 +168,13 @@ async function host(
           });
         registerHelper(pi, agentDir);
         pi.on('tool_call', (event) => {
-          if (!event.parentToolCallId) return;
+          if (!event.parentToolCallId || event.toolName === 'helper') return;
           nested.push(structuredClone(event));
           return gate?.(event);
         });
         pi.on('tool_result', (event) => {
           if (event.toolName === 'helper') outcomes.push(structuredClone(event));
-          if (event.parentToolCallId) return resultGate?.(event);
+          if (event.parentToolCallId && event.toolName !== 'helper') return resultGate?.(event);
         });
       },
     ],
@@ -180,6 +199,13 @@ async function host(
   }));
   await session.bindExtensions({ mode: 'json', onError: (e) => errors.push(e) });
   const before = session.getActiveToolNames();
+  if (viaCodemode) {
+    assert.ok(before.includes('helper'), 'Helper stays directly declared');
+    assert.ok(
+      session.getCallableToolNames().includes('helper'),
+      'Helper is callable from codemode',
+    );
+  }
   await session.prompt('PARENT_CURRENT_PRIVATE_84231. Delegate the selected task to helper.');
   assert.deepEqual(errors, []);
   assert.deepEqual(session.getActiveToolNames(), before, 'Helper does not activate extra tools');
@@ -396,3 +422,95 @@ test('real SDK: parent cancellation stops the child model', { timeout: 10000 }, 
   assert.equal(h.childCalls, 1);
   assert.equal(h.parentCalls, 1);
 });
+
+test(
+  'real codemode: Helper preserves argument rewrites, redaction and usage through two nested levels',
+  { timeout: 15000 },
+  async (t) => {
+    const h = await host(t, {
+      viaCodemode: true,
+      request: { task: 'Inspect original.txt' },
+      meteredRead: true,
+      gate: (event) => {
+        event.input.path = 'rewritten.txt';
+      },
+      resultGate: () => ({ content: [{ type: 'text', text: 'REDACTED' }] }),
+      child(n, context) {
+        if (n === 1) return message([call('read', { path: 'original.txt' })], 'toolUse');
+        const output = JSON.stringify(context.messages.at(-1));
+        assert.match(output, /Host executed adjusted arguments/);
+        assert.match(output, /rewritten.txt/);
+        assert.match(output, /REDACTED/);
+        assert.doesNotMatch(output, /after/);
+        return message('Inspected the filtered file.');
+      },
+    });
+    assert.equal(h.result.status, 'answered');
+    assert.equal(h.result.usage.totalTokens, 20);
+    assert.equal(h.event.parentToolCallId, 'parent-call');
+    assert.equal(h.nested.length, 1);
+    assert.equal(h.nested[0].parentToolCallId, h.event.toolCallId);
+    const stored = h.session.messages.find(
+      (m) => m.role === 'toolResult' && m.toolName === 'codemode',
+    );
+    assert.equal(stored.isError, false, JSON.stringify(stored));
+    assert.match(JSON.stringify(stored.content), /Inspected the filtered file/);
+    assert.match(JSON.stringify(stored.content), /AFTER_HELPER/);
+    assert.equal(
+      stored.usage.totalTokens,
+      30,
+      'two model responses and one metered read, counted once',
+    );
+  },
+);
+
+for (const terminate of [false, true])
+  test(
+    `real codemode: a parent denial stops Helper and propagates termination (${terminate})`,
+    { timeout: 15000 },
+    async (t) => {
+      const h = await host(t, {
+        viaCodemode: true,
+        request: { task: 'Inspect original.txt' },
+        gate: () => ({ block: true, reason: 'Host denied this read', terminate }),
+        child: () =>
+          message(
+            [
+              call('read', { path: 'original.txt' }, 'denied'),
+              call('read', { path: 'rewritten.txt' }, 'must-not-run'),
+            ],
+            'toolUse',
+          ),
+      });
+      assert.equal(h.result.status, terminate ? 'terminated' : 'error');
+      assert.equal(h.childCalls, 1);
+      assert.equal(h.nested.length, 1);
+      assert.equal(h.parentCalls, terminate ? 1 : 2);
+      const stored = h.session.messages.find(
+        (m) => m.role === 'toolResult' && m.toolName === 'codemode',
+      );
+      assert.equal(stored.isError, terminate);
+      if (terminate) assert.doesNotMatch(JSON.stringify(stored.content), /AFTER_HELPER/);
+      else {
+        // Structured errors resolve to a Helper result for the script to inspect.
+        assert.match(JSON.stringify(stored.content), /AFTER_HELPER/);
+        assert.match(JSON.stringify(stored.content), /Host denied this read/);
+      }
+    },
+  );
+
+test(
+  'real codemode: parent cancellation aborts the Helper model and settles the session',
+  { timeout: 15000 },
+  async (t) => {
+    const h = await host(t, {
+      viaCodemode: true,
+      request: { task: 'Inspect original.txt' },
+      child: () => message('unused'),
+      cancelChild: true,
+    });
+    assert.equal(h.result.status, 'cancelled');
+    assert.equal(h.childCalls, 1);
+    assert.equal(h.parentCalls, 1);
+  },
+);

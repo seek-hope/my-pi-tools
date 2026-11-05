@@ -21,7 +21,7 @@ export function registerHelper(pi: ExtensionAPI, agentDir = getAgentDir()) {
     parameters: requestSchema,
     outputSchema: resultSchema,
     executionMode: 'sequential',
-    exposure: 'model-only',
+    exposure: 'direct',
     reachesTools: () => READ_TOOLS,
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     async execute(id, request, signal, onUpdate, ctx) {
@@ -42,6 +42,8 @@ export function registerHelper(pi: ExtensionAPI, agentDir = getAgentDir()) {
             return input;
           },
         );
+        // Nested callers such as codemode do not propagate result.terminate themselves.
+        if (result.status === 'terminated') ctx.abort();
         return {
           content: [{ type: 'text' as const, text: JSON.stringify(result) }],
           details: result,

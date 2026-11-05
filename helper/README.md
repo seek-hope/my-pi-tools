@@ -14,7 +14,7 @@ From the repository root:
 pi install ./helper
 ```
 
-Use `/reload` in an existing Pi session. Helper is a model-only tool called by the main model:
+Use `/reload` in an existing Pi session. Helper uses `direct` exposure: the main model can call it directly, and codemode scripts can call `tools.helper()` when codemode is enabled:
 
 ```json
 {
@@ -22,6 +22,15 @@ Use `/reload` in an existing Pi session. Helper is a model-only tool called by t
   "context": "Expected behavior: downloaded archives preserve original filenames."
 }
 ```
+
+Codemode example:
+
+```javascript
+const result = await tools.helper({ task: "Review src/export.ts for Unicode filename handling." });
+text(result);
+```
+
+Codemode resolves to the structured Helper result, including partial and error results; inspect `status` before continuing. Argument validation failures can reject the call. A host termination stops the parent operation, including an enclosing codemode script.
 
 `task` must be nonblank and at most 20,000 characters. Optional `context` is at most 120,000 characters. These are the only accepted request fields. Supply paths, relevant project rules and supporting material explicitly.
 

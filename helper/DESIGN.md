@@ -6,7 +6,7 @@ Helper creates one temporary, read-only Pi SDK session per explicit delegation. 
 
 Pi owns model/tool scheduling, argument validation, ordinary tool-error feedback, context projection, compaction and transient provider retries. Helper owns the initial task, permitted host-tool proxies, total timeout, cancellation propagation, result extraction and cleanup. There is no separate Helper conversation loop or error-message whitelist.
 
-The single model-only tool accepts `task` and optional `context`, runs sequentially in the foreground, and returns an answer or partial findings. Each follow-up starts a fresh invocation.
+The single tool uses `direct` exposure for both model-issued calls and codemode scripts. It accepts `task` and optional `context`, runs sequentially in the foreground, and returns an answer or partial findings. Each follow-up starts a fresh invocation.
 
 ## Session construction
 
@@ -22,7 +22,7 @@ The child uses in-memory Pi default settings, with cache warming and telemetry d
 
 Each child tool invokes `ctx.executeTool()` on the original parent tool context. This keeps parent validation, permission hooks, argument rewriting, result filtering and nested-call accounting in place. Child calls are sequential. Helper observes parent `tool_result` events to retrieve the actual post-hook arguments, reporting any rewrite to the child.
 
-The child receives filtered model-facing content and the error flag; it does not receive parent tool usage or details. Ordinary executed errors go back to Pi for model correction. An error without `durationMs` indicates that the supported Pi host rejected execution, so Helper stops. A host `terminate` request takes precedence, aborts later work and propagates to the outer tool result. There is no direct local execution path around parent checks.
+The child receives filtered model-facing content and the error flag; it does not receive parent tool usage or details. Ordinary executed errors go back to Pi for model correction. An error without `durationMs` indicates that the supported Pi host rejected execution, so Helper stops. A host `terminate` request takes precedence, aborts later work and propagates to the outer tool result. The registration layer also calls the public `ctx.abort()` to stop the parent operation: native codemode does not propagate nested `terminate` flags itself. Structured Helper error results resolve normally in codemode, so scripts must inspect `status`. There is no direct local execution path around parent checks.
 
 This preserves tool hooks, not arbitrary parent session/model hooks. Host extensions and tool implementations remain trusted. Tool-name restrictions do not provide filesystem or operating-system isolation.
 
@@ -54,6 +54,6 @@ Parent nested-tool usage is accounted by Pi. Forwarding it into the child would 
 
 ## Verification
 
-Tests use real Pi sessions and offline providers. They cover context/resource isolation, native error correction, host deny/rewrite/filter/terminate hooks, independent invocations, model selection, compaction/retry, cancellation/deadlines, cleanup and usage. They also verify that unavailable host tools have no local fallback. Recovery tests exercise failures omitted from the native projection and summary usage that is not persisted. No test depends on paid provider access.
+Tests use real Pi sessions and offline providers. They cover context/resource isolation, native error correction, host deny/rewrite/filter/terminate hooks, independent invocations, model selection, compaction/retry, cancellation/deadlines, cleanup and usage. They also verify that unavailable host tools have no local fallback. Real codemode tests cover nested argument rewrites, result redaction, usage aggregation, denial, termination and cancellation. Recovery tests exercise failures omitted from the native projection and summary usage that is not persisted. No test depends on paid provider access.
 
 The [compatibility script](scripts/check-compat.mjs) discovers installed stable releases satisfying the Pi peer dependency and checks types, the complete suite and isolated extension loading. The version gate enforces only the minimum, with no release allowlist or upper bound. CI checks the minimum version and the latest stable release on Node 22 and 24. Upgrades require compatibility checks; implementation or requirement changes follow actual incompatibilities. These tests validate integration behavior, not answer quality or operating-system isolation.

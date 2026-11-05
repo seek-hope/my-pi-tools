@@ -61,7 +61,7 @@ pi -e /绝对路径/my-pi-tools/codegraph/src/index.ts
 
 ## 查询工具
 
-默认使用 `codemode` exposure：工具可以通过 codemode 调用，不把整套 schema 常驻在模型上下文中。连接成功后，pi 自动启用 codemode；如果你的 pi 配置禁用了这一行为，需要手动启用。
+默认使用 `direct` exposure：连接成功后，工具直接出现在模型工具列表中，同时可由 codemode 脚本调用。使用脚本调用时需启用 Pi 的 codemode。
 
 CodeGraph 1.6.2 **默认只公开 `codegraph_explore`**。工具名为：
 
@@ -90,11 +90,13 @@ text(result);
 
 MCP 返回完整 `CallToolResult`，包括 `content` 和可能的 `isError`，不是裸字符串。查询其他项目时可指定 `projectPath`，但额外项目不一定有实时 watcher；注意结果中的陈旧索引提示。新项目是否建索引由用户决定。
 
-想让模型直接看到工具，启动 pi 前设置：
+需要仅通过 codemode 暴露工具、减少常驻 schema 时，可在启动 pi 前覆盖默认设置：
 
 ```bash
-PI_CODEGRAPH_EXPOSURE=direct pi
+PI_CODEGRAPH_EXPOSURE=codemode pi
 ```
+
+已有 `PI_CODEGRAPH_EXPOSURE` 或同名 `mcp.json` 配置仍按显式配置生效；要同时支持直接调用和 codemode，请使用 `direct`。
 
 上游其他工具可通过 `CODEGRAPH_MCP_TOOLS` 选择，例如 `explore,node,search,callers,callees,impact,files,status`。这是 **CodeGraph 自身的环境变量**，实际工具集合以当前版本 `tools/list` 为准；若已有共享 daemon，需要重启该 daemon 才能更改它的环境。
 
@@ -120,7 +122,7 @@ PI_CODEGRAPH_EXPOSURE=direct pi
 | --- | --- | --- |
 | `PI_CODEGRAPH_COMMAND` | `codegraph` | PATH 中的可执行文件名，或绝对路径；支持 `~/`。不是 shell 命令，不接受 `npx ...` 或附加参数 |
 | `PI_CODEGRAPH_PROJECT` | `.` | 项目目录，支持绝对路径、`~/`、相对 pi 会话目录的路径 |
-| `PI_CODEGRAPH_EXPOSURE` | `codemode` | `codemode` / `direct` / `deferred` / `hidden` |
+| `PI_CODEGRAPH_EXPOSURE` | `direct` | `codemode` / `direct` / `deferred` / `hidden` |
 | `PI_CODEGRAPH_WATCH` | `1` | `0` 为 MCP 启动参数添加 `--no-watch`；只接受 `0` / `1` |
 | `PI_CODEGRAPH_TIMEOUT` | `120` | MCP 单次请求和短 CLI 命令超时，秒，范围 1–3600；MCP progress 通知按 pi 规则重置超时 |
 | `PI_CODEGRAPH_COMMAND_TIMEOUT` | `900` | `init` / `sync` 超时，秒，范围 1–86400 |

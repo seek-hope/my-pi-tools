@@ -5,6 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 import {
 	createAgentSession,
+	createCodemodeExtension,
 	DefaultResourceLoader,
 	ModelRuntime,
 	SessionManager,
@@ -14,7 +15,7 @@ import { loadConfig } from "../src/config.ts";
 import type { DeepSeekClient, SearchInput } from "../src/deepseek.ts";
 import { registerWebTools } from "../src/tools.ts";
 
-test("real Pi validates and coerces Search arguments before invoking clients", async (t) => {
+test("real Pi validates Search arguments and exposes both tools directly and through codemode", async (t) => {
 	const cwd = await mkdtemp(join(tmpdir(), "pi-search-schema-"));
 	const agentDir = join(cwd, "agent");
 	t.after(() => rm(cwd, { recursive: true, force: true }));
@@ -33,6 +34,7 @@ test("real Pi validates and coerces Search arguments before invoking clients", a
 		fetchCache: {} as never,
 	};
 	const settingsManager = SettingsManager.inMemory({
+		defaultTools: ["+codemode"],
 		retry: { enabled: false },
 		compaction: { enabled: false },
 	});
@@ -46,6 +48,7 @@ test("real Pi validates and coerces Search arguments before invoking clients", a
 		noPromptTemplates: true,
 		noContextFiles: true,
 		extensionFactories: [
+			createCodemodeExtension({ mode: "on" }),
 			(pi) =>
 				registerWebTools(pi, {
 					config: loadConfig({ DEEPSEEK_API_KEY: "fixture" }),
@@ -75,13 +78,20 @@ test("real Pi validates and coerces Search arguments before invoking clients", a
 		session.dispose();
 	});
 	await session.bindExtensions({});
+	for (const name of ["web_search", "web_fetch"]) {
+		assert.ok(session.getActiveToolNames().includes(name), `${name} is directly declared`);
+		assert.ok(session.getCallableToolNames().includes(name), `${name} is callable by codemode`);
+	}
 	// Seed the issuing call so the real nested-tool pipeline can run without a model.
 	manager.appendMessage({
 		role: "assistant",
 		api: "openai-completions",
 		provider: "fixture",
 		model: "offline",
-		content: [{ type: "toolCall", id: "schema-test", name: "web_search", arguments: {} }],
+		content: [
+			{ type: "toolCall", id: "schema-test", name: "web_search", arguments: {} },
+			{ type: "toolCall", id: "codemode-test", name: "codemode", arguments: {} },
+		],
 		stopReason: "toolUse",
 		timestamp: Date.now(),
 		usage: {
@@ -123,4 +133,13 @@ test("real Pi validates and coerces Search arguments before invoking clients", a
 	const fetched = await ctx.executeTool("web_fetch", { url: "https://example.com", provider: "deepseek" });
 	assert.equal(fetched.isError, false);
 	assert.deepEqual(fetches, ["https://example.com"]);
+	const codemode = session.agent.state.tools.find((tool) => tool.name === "codemode");
+	assert.ok(codemode);
+	const scripted = await codemode.execute("codemode-test", {
+		code: 'text(await tools.web_search({query: "Pi codemode", provider: "deepseek"})); text(await tools.web_fetch({url: "https://example.com/codemode", provider: "deepseek"}));',
+	}, AbortSignal.timeout(10000));
+	assert.notEqual(scripted.isError, true, JSON.stringify(scripted));
+	assert.equal(searches.at(-1)?.query, "Pi codemode");
+	assert.equal(fetches.at(-1), "https://example.com/codemode");
+	assert.match(JSON.stringify(scripted.content), /Body/);
 });

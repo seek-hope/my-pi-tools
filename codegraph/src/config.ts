@@ -43,7 +43,7 @@ export function expandHome(path: string): string {
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
-  const exposure = value(env, "PI_CODEGRAPH_EXPOSURE", "codemode");
+  const exposure = value(env, "PI_CODEGRAPH_EXPOSURE", "direct");
   if (!["codemode", "direct", "deferred", "hidden"].includes(exposure)) {
     throw new Error("PI_CODEGRAPH_EXPOSURE must be codemode, direct, deferred, or hidden.");
   }

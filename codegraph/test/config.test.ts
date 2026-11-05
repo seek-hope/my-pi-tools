@@ -6,7 +6,7 @@ import { CHILD_ENV, loadConfig, projectPath, serverConfig } from "../src/config.
 
 test("defaults register a session-relative native MCP server, without indexing", () => {
   const config = loadConfig({});
-  assert.equal(config.exposure, "codemode");
+  assert.equal(config.exposure, "direct");
   assert.equal(config.commandTimeoutMs, 900_000);
   const server = serverConfig(config);
   assert.equal(server.cwd, ".");

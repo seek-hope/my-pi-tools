@@ -14,7 +14,7 @@
 pi install ./helper
 ```
 
-已运行的 Pi 会话需要执行 `/reload`。Helper 是由主模型直接调用的 model-only 工具：
+已运行的 Pi 会话需要执行 `/reload`。Helper 使用 `direct` exposure，主模型可以直接调用；启用 codemode 后，脚本也可以调用 `tools.helper()`：
 
 ```json
 {
@@ -22,6 +22,15 @@ pi install ./helper
   "context": "预期行为：下载的归档保留原始文件名。"
 }
 ```
+
+codemode 示例：
+
+```javascript
+const result = await tools.helper({ task: "检查 src/export.ts 的 Unicode 文件名处理。" });
+text(result);
+```
+
+脚本会收到结构化的 Helper 结果，包括部分结果和错误结果；继续执行前应检查 `status`。参数校验失败仍可能使调用抛错。宿主要求终止时，会中止父会话当前操作，包括外层 codemode 脚本。
 
 `task` 不能为空白，最多 20,000 字符；可选 `context` 最多 120,000 字符。请求只接受这两个字段。请明确提供路径、相关项目规则和必要材料。
 

@@ -51,13 +51,13 @@ test('settings keep only timeout and optional model selection; unknown limits ar
   assert.throws(() => loadSettings(cwd, agentDir), /Cannot read/);
   assert.throws(() => validateSettings({ timeoutSeconds: Infinity }));
 });
-test('one model-only read-only tool declares exactly the parent tools it reaches', (t) => {
+test('one direct and codemode-callable read-only tool declares exactly the parent tools it reaches', (t) => {
   const { agentDir } = directories(t);
   const tools = [],
     events = [];
   registerHelper({ registerTool: (t) => tools.push(t), on: (name) => events.push(name) }, agentDir);
   assert.equal(tools.length, 1);
-  assert.equal(tools[0].exposure, 'model-only');
+  assert.equal(tools[0].exposure, 'direct');
   assert.equal(tools[0].executionMode, 'sequential');
   assert.equal(tools[0].annotations.readOnlyHint, true);
   assert.equal(tools[0].annotations.destructiveHint, false);

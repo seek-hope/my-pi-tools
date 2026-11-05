@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/seek-hope/my-pi-tools/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/seek-hope/my-pi-tools/actions/workflows/ci.yml)
 
-三个面向 [Pi](https://github.com/earendil-works/pi) coding agent 的独立扩展，可按需安装：
+三个面向 [Pi](https://github.com/earendil-works/pi) coding agent 的独立扩展，可按需安装。模型工具默认同时支持直接调用和 codemode；使用脚本调用时需启用 Pi 的 codemode：
 
 | 扩展 | 包名 | 能力 | 额外依赖 |
 | --- | --- | --- | --- |

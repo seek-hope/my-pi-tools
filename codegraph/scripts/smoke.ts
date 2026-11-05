@@ -27,7 +27,7 @@ const overrides: NodeJS.ProcessEnv = {
   USERPROFILE: home,
   PI_CODING_AGENT_DIR: agentDir,
   PI_CODEGRAPH_PROJECT: ".",
-  PI_CODEGRAPH_EXPOSURE: "codemode",
+  PI_CODEGRAPH_EXPOSURE: "direct",
   PI_CODEGRAPH_WATCH: "1",
   CODEGRAPH_NO_DAEMON: "1",
   CODEGRAPH_NO_WATCH: "0",
@@ -89,13 +89,16 @@ try {
   for (let i = 0; i < 300 && !session.getAllTools().some((tool) => tool.name === name); i++) await delay(100);
   assert.ok(session.getAllTools().some((tool) => tool.name === name), `Missing MCP tool; errors: ${errors.join("; ")}`);
   assert.ok(session.getCallableToolNames().includes(name));
-  assert.ok(!session.getActiveToolNames().includes(name), "default MCP exposure should remain codemode");
+  assert.ok(session.getActiveToolNames().includes(name), "direct MCP tools must also be declared to the model");
 
   // Seed a deterministic assistant tool-call fixture in the authoritative session
   // history. Nested tools require an issuing assistant message; no LLM is used.
   session.sessionManager.appendMessage({
     role: "assistant", api: "openai-completions", provider: "smoke", model: "fixture",
-    content: [{ type: "toolCall", id: "smoke", name: "codemode", arguments: {} }],
+    content: [
+      { type: "toolCall", id: "smoke", name, arguments: {} },
+      { type: "toolCall", id: "smoke-codemode", name: "codemode", arguments: {} },
+    ],
     usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0,
       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
     stopReason: "toolUse", timestamp: Date.now(),
@@ -108,7 +111,11 @@ try {
     assert.equal(outcome.isError, false, text(outcome.result.content));
     return text(outcome.result.content);
   };
-  const first = await explore();
+  const direct = session.agent.state.tools.find((tool) => tool.name === name);
+  assert.ok(direct);
+  const directResult = await direct.execute("smoke", { query: "greet welcome", projectPath: cwd, maxFiles: 5 }, AbortSignal.timeout(60_000));
+  assert.notEqual(directResult.isError, true, text(directResult.content));
+  const first = text(directResult.content);
   assert.match(first, /before-/);
   assert.match(first, /welcome/);
 
@@ -140,7 +147,7 @@ try {
   assert.doesNotMatch(updated, /pending re-index|edited since the last index|changed on disk after/i);
   await command("sync");
   assert.deepEqual(errors, []);
-  console.log("PASS: real Pi extension load, CLI status/init, MCP discovery/query, codemode, live sync, and manual sync.");
+  console.log("PASS: real Pi extension load, CLI status/init, MCP direct calls and codemode, live sync, and manual sync.");
 } finally {
   if (session) {
     await session.extensionRunner.emit({ type: "session_shutdown", reason: "quit" });
