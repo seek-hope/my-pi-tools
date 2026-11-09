@@ -45,7 +45,7 @@ Access token、refresh token、过期时间和 Code Assist 项目 ID 交由 Pi �
 
 重新登录可切换账号。使用 `/logout` 选择此 provider，可从 Pi 删除凭据；若要撤销 Google 端授权，请使用 Google 账号的第三方应用授权管理页面。
 
-个人账号通常会得到 Google 管理的项目。组织账号若要求显式项目，可在启动 Pi 前设置：
+个人账号通常会得到 Google 管理的项目。首次登录时，扩展会完成 Code Assist 初始化，再从 Google 的返回结果获取项目；tier 中的项目提示字段不会提前中止登录。组织账号若仍要求显式项目，可在启动 Pi 前设置：
 
 ```bash
 export GEMINI_LOGIN_PROJECT=your-google-cloud-project-id
@@ -54,7 +54,7 @@ pi
 
 随后重新执行 `/login gemini-login`。使用项目 ID，不能填写项目数字编号；该项目仍需具备账号所要求的 Code Assist 权限。如果 Google 要求账号验证，请先在官方 Gemini CLI 中完成验证，再重试。
 
-扩展仅接受 Google 返回的默认 onboarding tier，不主动选择付费升级，也默认不发送 `enabled_credit_types` 来启用额外 Google One AI Credits 消费。达到额度限制时返回错误，交由 Pi 的重试策略处理；不会自动切换至按量付费的 API Key。
+扩展使用 Google 返回的默认 onboarding tier；未返回默认值时，采用官方 CLI 的 `legacy-tier` 回退。账号能否完成初始化由 Google 决定。扩展不主动选择付费升级，也默认不发送 `enabled_credit_types` 来启用额外 Google One AI Credits 消费。达到额度限制时返回错误，交由 Pi 的重试策略处理；不会自动切换至按量付费的 API Key。
 
 Pi 中显示的 token 用量取自 Google 响应，包含缓存与 reasoning 分项。费用显示为零估算，表示不按 Gemini API 单价计费，不能用于判断订阅价格、剩余额度或 Google 最终账单。
 
@@ -62,7 +62,8 @@ Pi 中显示的 token 用量取自 Google 响应，包含缓存与 reasoning 分
 
 - 看不到 provider：确认安装成功并执行 `/reload`。查看扩展加载错误，而不是反复授权。
 - 401 或 token 刷新失败：重新执行 `/login gemini-login`。网络错误和取消不会覆盖旧凭据。
-- 403：检查当前 Google 账号的订阅、资格及项目权限。
+- 提示缺少项目：Google 完成初始化后仍未返回项目。先查看是否同时出现账号资格限制；确实需要自有项目时再设置 `GEMINI_LOGIN_PROJECT`。
+- 403：检查当前 Google 账号的订阅、资格及项目权限。初始化失败时会附上已知的资格原因，例如 `UNSUPPORTED_LOCATION` 或 `RESTRICTED_AGE`。
 - 404：该模型或资源可能尚未向账号开放，尝试目录中的其他模型。
 - 429：CLI / Code Assist 额度或速率受到限制，等待恢复；网页聊天是否可用不能证明 CLI 额度仍有剩余。
 - 流中断或缺少结束事件：返回错误并保留已收到的文本，避免把不完整回答当作成功。

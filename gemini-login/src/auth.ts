@@ -83,6 +83,40 @@ function authorizationCode(input: string, state: string): string {
   return requiredString(value, 'authorization code');
 }
 
+const ELIGIBILITY_REASONS: Record<string, string> = {
+  DASHER_USER: 'Google Workspace account is not eligible for the individual tier',
+  INELIGIBLE_ACCOUNT: 'Account is not eligible for this tier',
+  NON_USER_ACCOUNT: 'A personal user sign-in is required',
+  RESTRICTED_AGE: 'Google reports an age restriction',
+  RESTRICTED_NETWORK: 'Google reports a network restriction',
+  UNKNOWN_LOCATION: 'Google could not determine an eligible location',
+  UNSUPPORTED_LOCATION: 'Google reports an unsupported location',
+  VALIDATION_REQUIRED: 'Complete account verification in the official Gemini CLI and retry login',
+  UNKNOWN: 'Google did not provide a recognized eligibility reason',
+};
+
+function eligibilityFailure(loaded: Json): string | undefined {
+  if (!Array.isArray(loaded.ineligibleTiers) || !loaded.ineligibleTiers.length) return undefined;
+  // Only render known reason codes. Raw server messages can contain account data or credentials.
+  const reasons = loaded.ineligibleTiers.map((tier: Json | null) => {
+    const code =
+      typeof tier?.reasonCode === 'string' && Object.hasOwn(ELIGIBILITY_REASONS, tier.reasonCode)
+        ? tier.reasonCode
+        : 'UNKNOWN';
+    return `${code}: ${ELIGIBILITY_REASONS[code]}`;
+  });
+  return `Google Code Assist eligibility: ${[...new Set(reasons)].join('; ')}`;
+}
+
+function resolvedProject(value: unknown, loaded: Json): string {
+  if (typeof value === 'string' && value.trim())
+    return requiredString(value, 'Code Assist project');
+  throw new GeminiError(
+    eligibilityFailure(loaded) ??
+      'Google did not return a Code Assist project. If this account requires a user-managed project, set GEMINI_LOGIN_PROJECT and log in again',
+  );
+}
+
 export async function setupProject(
   token: string,
   dependencies: AuthDependencies,
@@ -102,10 +136,7 @@ export async function setupProject(
   );
   if (loaded.currentTier) {
     return {
-      projectId: requiredString(
-        loaded.cloudaicompanionProject ?? project,
-        'Code Assist project; set GEMINI_LOGIN_PROJECT and log in again',
-      ),
+      projectId: resolvedProject(loaded.cloudaicompanionProject || project, loaded),
       tier: loaded.paidTier?.id ?? loaded.currentTier.id,
     };
   }
@@ -116,26 +147,32 @@ export async function setupProject(
     throw new GeminiError(
       'Google account verification is required; complete it in the official Gemini CLI and retry login',
     );
+  // Match Gemini CLI setupUser: use the offered default or its legacy fallback.
+  // The userDefinedCloudaicompanionProject hint must not prevent onboarding:
+  // Google may still return a managed project from onboardUser.
   const tier = (Array.isArray(loaded.allowedTiers) ? loaded.allowedTiers : []).find(
-    (tier: Json) => tier.isDefault,
-  );
-  if (!tier?.id)
-    throw new GeminiError(
-      'Google did not offer an eligible Code Assist tier; check the account and project',
+    (tier: Json) => tier?.isDefault,
+  ) ?? { id: 'legacy-tier' };
+  requiredString(tier.id, 'default Code Assist tier');
+  let operation: Json;
+  try {
+    operation = await postJson(
+      fetch,
+      `${BASE_URL}:onboardUser`,
+      {
+        tierId: tier.id,
+        metadata: tier.id === 'free-tier' ? METADATA : metadata,
+        ...(tier.id !== 'free-tier' && project ? { cloudaicompanionProject: project } : {}),
+      },
+      token,
+      signal,
     );
-  if (tier.userDefinedCloudaicompanionProject && !project)
-    throw new GeminiError('This account requires GEMINI_LOGIN_PROJECT; set it and log in again');
-  let operation = await postJson(
-    fetch,
-    `${BASE_URL}:onboardUser`,
-    {
-      tierId: tier.id,
-      metadata: tier.id === 'free-tier' ? METADATA : metadata,
-      ...(tier.id !== 'free-tier' && project ? { cloudaicompanionProject: project } : {}),
-    },
-    token,
-    signal,
-  );
+  } catch (error) {
+    const eligibility = eligibilityFailure(loaded);
+    if (error instanceof GeminiError && eligibility && !signal.aborted)
+      throw new GeminiError(`${error.message}. ${eligibility}`);
+    throw error;
+  }
   while (!operation.done) {
     const name = requiredString(operation.name, 'onboarding operation');
     if (!/^(?:[a-zA-Z0-9_-]+\/)*operations\/[a-zA-Z0-9_.~=-]+$/.test(name))
@@ -152,12 +189,12 @@ export async function setupProject(
     }
     operation = await readJson(response);
   }
-  if (operation.error) throw new GeminiError('Google Code Assist onboarding failed');
+  if (operation.error)
+    throw new GeminiError(
+      `Google Code Assist onboarding failed. ${eligibilityFailure(loaded) ?? ''}`.trim(),
+    );
   return {
-    projectId: requiredString(
-      operation.response?.cloudaicompanionProject?.id ?? project,
-      'onboarded Code Assist project',
-    ),
+    projectId: resolvedProject(operation.response?.cloudaicompanionProject?.id || project, loaded),
     tier: tier.id,
   };
 }

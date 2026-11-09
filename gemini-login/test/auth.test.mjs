@@ -122,16 +122,11 @@ test('first login onboards only the offered default tier and polls the returned 
   assert.equal(requests.length, 3);
 });
 
-test('account verification, missing enterprise project and unexpected operation paths stop onboarding', async () => {
+test('account verification, invalid setup responses and unexpected operation paths stop onboarding', async () => {
   for (const payload of [
     { ineligibleTiers: [{ reasonCode: 'VALIDATION_REQUIRED' }] },
     { currentTier: { id: 'standard-tier' } },
-    {
-      allowedTiers: [
-        { id: 'standard-tier', isDefault: true, userDefinedCloudaicompanionProject: true },
-      ],
-    },
-    { allowedTiers: [] },
+    { allowedTiers: [{ isDefault: true }] },
   ]) {
     let requests = 0;
     await assert.rejects(
