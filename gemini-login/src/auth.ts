@@ -1,3 +1,4 @@
+import { eligibilityFailure, hasUnsupportedClient } from './diagnostics.ts';
 import { createHash, randomBytes } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { OAuthAuth, OAuthCredential, ProviderAuthInteraction } from '@earendil-works/pi-ai';
@@ -83,47 +84,29 @@ function authorizationCode(input: string, state: string): string {
   return requiredString(value, 'authorization code');
 }
 
-const ELIGIBILITY_REASONS: Record<string, string> = {
-  DASHER_USER: 'Google Workspace account is not eligible for the individual tier',
-  INELIGIBLE_ACCOUNT: 'Account is not eligible for this tier',
-  NON_USER_ACCOUNT: 'A personal user sign-in is required',
-  RESTRICTED_AGE: 'Google reports an age restriction',
-  RESTRICTED_NETWORK: 'Google reports a network restriction',
-  UNKNOWN_LOCATION: 'Google could not determine an eligible location',
-  UNSUPPORTED_LOCATION: 'Google reports an unsupported location',
-  VALIDATION_REQUIRED: 'Complete account verification in the official Gemini CLI and retry login',
-  UNKNOWN: 'Google did not provide a recognized eligibility reason',
-};
-
-function eligibilityFailure(loaded: Json): string | undefined {
-  if (!Array.isArray(loaded.ineligibleTiers) || !loaded.ineligibleTiers.length) return undefined;
-  // Only render known reason codes. Raw server messages can contain account data or credentials.
-  const reasons = loaded.ineligibleTiers.map((tier: Json | null) => {
-    const code =
-      typeof tier?.reasonCode === 'string' && Object.hasOwn(ELIGIBILITY_REASONS, tier.reasonCode)
-        ? tier.reasonCode
-        : 'UNKNOWN';
-    return `${code}: ${ELIGIBILITY_REASONS[code]}`;
-  });
-  return `Google Code Assist eligibility: ${[...new Set(reasons)].join('; ')}`;
-}
-
-function resolvedProject(value: unknown, loaded: Json): string {
+function resolvedProject(
+  value: unknown,
+  loaded: Json,
+  phase: string,
+  secrets: readonly string[],
+): string {
   if (typeof value === 'string' && value.trim())
     return requiredString(value, 'Code Assist project');
-  throw new GeminiError(
-    eligibilityFailure(loaded) ??
-      'Google did not return a Code Assist project. If this account requires a user-managed project, set GEMINI_LOGIN_PROJECT and log in again',
-  );
+  const reason =
+    eligibilityFailure(loaded, secrets) ??
+    'If this account requires a user-managed project, set GEMINI_LOGIN_PROJECT and log in again';
+  throw new GeminiError(`Google did not return a Code Assist project after ${phase}. ${reason}`);
 }
 
 export async function setupProject(
   token: string,
   dependencies: AuthDependencies,
   signal: AbortSignal,
+  privateValues: readonly string[] = [],
 ): Promise<{ projectId: string; tier?: string }> {
   const fetch = dependencies.fetch ?? globalThis.fetch;
   const project = dependencies.projectId?.trim() || undefined;
+  const secrets = [token, ...privateValues, ...(project ? [project] : [])];
   if (project && (/^\d+$/.test(project) || /[\r\n\0]/.test(project)))
     throw new GeminiError('GEMINI_LOGIN_PROJECT must be a project ID, not a project number');
   const metadata = { ...METADATA, ...(project ? { duetProject: project } : {}) };
@@ -134,9 +117,18 @@ export async function setupProject(
     token,
     signal,
   );
+  if (!loaded.currentTier && !project && hasUnsupportedClient(loaded))
+    throw new GeminiError(
+      `Google rejected this client during loadCodeAssist. ${eligibilityFailure(loaded, secrets)}`,
+    );
   if (loaded.currentTier) {
     return {
-      projectId: resolvedProject(loaded.cloudaicompanionProject || project, loaded),
+      projectId: resolvedProject(
+        loaded.cloudaicompanionProject || project,
+        loaded,
+        'loadCodeAssist',
+        secrets,
+      ),
       tier: loaded.paidTier?.id ?? loaded.currentTier.id,
     };
   }
@@ -168,7 +160,7 @@ export async function setupProject(
       signal,
     );
   } catch (error) {
-    const eligibility = eligibilityFailure(loaded);
+    const eligibility = eligibilityFailure(loaded, secrets);
     if (error instanceof GeminiError && eligibility && !signal.aborted)
       throw new GeminiError(`${error.message}. ${eligibility}`);
     throw error;
@@ -191,10 +183,15 @@ export async function setupProject(
   }
   if (operation.error)
     throw new GeminiError(
-      `Google Code Assist onboarding failed. ${eligibilityFailure(loaded) ?? ''}`.trim(),
+      `Google Code Assist onboarding failed. ${eligibilityFailure(loaded, secrets) ?? ''}`.trim(),
     );
   return {
-    projectId: resolvedProject(operation.response?.cloudaicompanionProject?.id || project, loaded),
+    projectId: resolvedProject(
+      operation.response?.cloudaicompanionProject?.id || project,
+      loaded,
+      'onboardUser',
+      secrets,
+    ),
     tier: tier.id,
   };
 }
@@ -202,9 +199,9 @@ export async function setupProject(
 export function createOAuth(dependencies: AuthDependencies = {}): OAuthAuth {
   const fetch = dependencies.fetch ?? globalThis.fetch;
   return {
-    name: 'Google Gemini subscription',
+    name: 'Google Code Assist (legacy)',
     isSubscription: true,
-    loginLabel: 'Sign in with Google (AI Pro / Ultra)',
+    loginLabel: 'Sign in with Google (Code Assist organization license)',
     async login(interaction: ProviderAuthInteraction) {
       const signal = AbortSignal.any([interaction.signal, AbortSignal.timeout(300_000)]);
       try {
@@ -228,7 +225,7 @@ export function createOAuth(dependencies: AuthDependencies = {}): OAuthAuth {
           type: 'auth_url',
           url: url.toString(),
           instructions:
-            'Sign in with the Google account holding your subscription, then paste the code shown by Google.',
+            'Use an account with an eligible Code Assist organization license. Personal Google AI Pro / Ultra access through this client has ended. Paste the code shown by Google.',
         });
         const input = await interaction.prompt({
           type: 'manual_code',
@@ -237,18 +234,23 @@ export function createOAuth(dependencies: AuthDependencies = {}): OAuthAuth {
           signal,
         });
         signal.throwIfAborted();
+        const code = authorizationCode(input, state);
         const credential = await exchange(
           fetch,
           {
             grant_type: 'authorization_code',
-            code: authorizationCode(input, state),
+            code,
             redirect_uri: REDIRECT_URI,
             code_verifier: verifier,
           },
           signal,
         );
         interaction.notify({ type: 'progress', message: 'Checking Google Code Assist access…' });
-        const account = await setupProject(credential.access, { ...dependencies, fetch }, signal);
+        const account = await setupProject(credential.access, { ...dependencies, fetch }, signal, [
+          credential.refresh,
+          code,
+          verifier,
+        ]);
         signal.throwIfAborted();
         return { ...credential, ...account };
       } catch (error) {

@@ -1,10 +1,12 @@
-# Gemini Login
+# Gemini Login（旧版 Code Assist）
 
-为 Pi 提供 `gemini-login` 模型 provider，通过 Google 登录使用 Gemini CLI / Code Assist 权益。主要面向持有 Google AI Pro / Ultra 的个人账号；Google 允许的免费 Code Assist 账号也可登录。它使用账号的 CLI 额度，不能把 Gemini 网页额度转换为通用 Gemini API Key。
+为 Pi 提供 `gemini-login` 模型 provider，使用旧版 Gemini CLI / Code Assist 的 Google OAuth 入口。仅适用于 Google 仍支持的 Code Assist 账号与许可，例如符合要求的组织 Standard / Enterprise 账号。
 
-这是独立扩展。授权流程和接口依据 Google Gemini CLI v0.67.0；账号资格、模型开放范围和额度由 Google 决定。
+**个人 Google AI Pro / Ultra 订阅不再适用于此入口。** Google 已于 **2026 年 6 月 18 日**停止通过 Gemini CLI / Code Assist 服务个人免费账号及 Google AI Pro / Ultra 用户，并要求迁移至 Antigravity。见 [Google 官方停用公告](https://developers.google.com/gemini-code-assist/docs/deprecations/code-assist-individuals)和 [Gemini CLI 官方说明](https://github.com/google-gemini/gemini-cli/blob/v0.67.0/README.md)。设置项目 ID、重新授权或升级订阅不能恢复这个已停用的个人入口。
 
-## 安装与登录
+这是独立扩展，授权流程和接口依据 Gemini CLI v0.67.0。它不实现 Antigravity 登录，也不能将个人订阅转换成通用 Gemini API Key。组织许可另有服务生命周期，账号资格和模型开放范围仍以 Google 为准。
+
+## 安装与登录（符合要求的组织账号）
 
 需要 Node.js ≥ 22.19、Pi ≥ 1.5.0 稳定版。在仓库根目录执行：
 
@@ -20,7 +22,7 @@ pi install ./gemini-login
 /login gemini-login
 ```
 
-打开 Pi 提供的 Google 授权链接，选择持有订阅的账号并授权，将 Google 页面显示的授权码粘贴回 Pi。扩展使用 PKCE，不启动本地 HTTP 服务；SSH 环境也可以在本机浏览器完成授权。一次登录最多等待五分钟，取消后可重新执行 `/login`。
+Pi 中显示名称为 `Google Code Assist (legacy)`，provider ID 仍为 `gemini-login`。打开授权链接，选择拥有相应 Code Assist 组织许可的账号，将 Google 页面显示的授权码粘贴回 Pi。扩展使用 PKCE，不启动本地 HTTP 服务；SSH 环境也可以在本机浏览器完成授权。一次登录最多等待五分钟，取消后可重新执行 `/login`。
 
 登录后通过 `/model` 选择 `gemini-login` 下的模型。也可以启动新会话：
 
@@ -45,7 +47,7 @@ Access token、refresh token、过期时间和 Code Assist 项目 ID 交由 Pi �
 
 重新登录可切换账号。使用 `/logout` 选择此 provider，可从 Pi 删除凭据；若要撤销 Google 端授权，请使用 Google 账号的第三方应用授权管理页面。
 
-个人账号通常会得到 Google 管理的项目。首次登录时，扩展会完成 Code Assist 初始化，再从 Google 的返回结果获取项目；tier 中的项目提示字段不会提前中止登录。组织账号若仍要求显式项目，可在启动 Pi 前设置：
+Google 可能返回账号已关联的项目。组织许可若需要显式指定项目，请使用管理员配置并授予权限的项目，在启动 Pi 前设置：
 
 ```bash
 export GEMINI_LOGIN_PROJECT=your-google-cloud-project-id
@@ -61,9 +63,11 @@ Pi 中显示的 token 用量取自 Google 响应，包含缓存与 reasoning 分
 ## 常见问题
 
 - 看不到 provider：确认安装成功并执行 `/reload`。查看扩展加载错误，而不是反复授权。
-- 401 或 token 刷新失败：重新执行 `/login gemini-login`。网络错误和取消不会覆盖旧凭据。
+- `UNSUPPORTED_CLIENT`：Google 拒绝了这个客户端。个人免费及 Pro / Ultra 入口已经停用，请按官方公告迁移；反复授权无法恢复。
+- `UNKNOWN` 或其他新错误码：扩展会保留服务端错误码和脱敏后的 `reasonMessage`，并标明失败阶段。不能只根据 `UNKNOWN` 推断地区、年龄或项目问题。
+- 401 或 token 刷新失败：符合要求的组织账号可重新执行 `/login gemini-login`。网络错误和取消不会覆盖旧凭据。
 - 提示缺少项目：Google 完成初始化后仍未返回项目。先查看是否同时出现账号资格限制；确实需要自有项目时再设置 `GEMINI_LOGIN_PROJECT`。
-- 403：检查当前 Google 账号的订阅、资格及项目权限。初始化失败时会附上已知的资格原因，例如 `UNSUPPORTED_LOCATION` 或 `RESTRICTED_AGE`。
+- 403：检查组织许可、账号资格及项目权限。初始化失败时会附上 Google 返回的资格原因和说明。诊断会隐藏本次登录的 token、授权码、配置的项目 ID 和邮箱，不保存完整响应或额外凭据副本。
 - 404：该模型或资源可能尚未向账号开放，尝试目录中的其他模型。
 - 429：CLI / Code Assist 额度或速率受到限制，等待恢复；网页聊天是否可用不能证明 CLI 额度仍有剩余。
 - 流中断或缺少结束事件：返回错误并保留已收到的文本，避免把不完整回答当作成功。
@@ -78,7 +82,7 @@ npm --prefix gemini-login test
 npm --prefix gemini-login run check:format
 ```
 
-测试使用模拟 HTTP 响应覆盖授权码与 PKCE、项目 onboarding、刷新与取消、SSE 分片、图片和工具往返、错误与用量，并在真实 Pi SDK 会话内执行直接工具和 codemode 调用。它们不连接 Google，也不验证账号资格或实时模型开放情况。CI 在 Node 22/24 上检查 Pi 1.5.0 基线与最新稳定版。
+测试使用模拟 HTTP 响应覆盖授权码与 PKCE、项目 onboarding、停用客户端与未知错误诊断、凭据脱敏、刷新与取消、SSE 分片、图片和工具往返、错误与用量，并在真实 Pi SDK 会话内执行直接工具和 codemode 调用。它们不连接 Google，不能证明账号具备资格，也不能证明个人订阅入口仍然可用。CI 在 Node 22/24 上检查 Pi 1.5.0 基线与最新稳定版。
 
 实际验收需本人登录，然后让所选 Gemini 模型回答简单问题并读取一个测试文件；这些请求会消耗账号额度。不要将授权码或 token 粘贴到模型对话中，应仅粘贴到 Pi 的登录输入框。
 

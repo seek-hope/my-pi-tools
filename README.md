@@ -9,7 +9,7 @@
 | [CodeGraph](codegraph/README.md) | `pi-codegraph` | 通过原生 MCP 查询源码、调用路径和修改影响，用 `/codegraph` 管理索引 | CodeGraph CLI |
 | [Search](search/README.md) | `pi-deepseek-web` | DeepSeek + Exa 网页搜索与抓取，合并结果并处理单源失败 | 至少一个 provider 的 API Key |
 | [Helper](helper/README.zh-CN.md) | `my-pi-helper` | 临时只读 Pi 会话，使用原生上下文管理并保留主会话权限 hook | 宿主工具与已配置模型 |
-| [Gemini Login](gemini-login/README.md) | `my-pi-gemini-login` | Google 登录与 Gemini 订阅模型 provider | 有 Code Assist 权益的 Google 账号 |
+| [Gemini Login](gemini-login/README.md) | `my-pi-gemini-login` | 旧版 Code Assist OAuth provider；个人 Pro / Ultra 入口已停用 | 符合 Google 当前要求的组织 Code Assist 许可 |
 
 ## 环境与安装
 
@@ -68,7 +68,7 @@ export EXA_API_KEY=...
 
 ### Gemini Login
 
-安装后执行 `/login gemini-login`，在浏览器中用订阅账号授权，将 Google 显示的授权码粘贴回 Pi。再用 `/model` 选择 `gemini-login` 下的模型。凭据和自动刷新由 Pi 管理，使用 Gemini CLI / Code Assist 额度，默认不启用额外 AI Credits。账号资格、项目与模型范围见 [Gemini Login README](gemini-login/README.md)。
+此扩展使用旧版 Code Assist 登录入口。Google 已于 2026 年 6 月 18 日停止通过该入口服务个人免费账号和 Google AI Pro / Ultra，当前插件不能把这些个人订阅接入 Pi。符合要求的组织 Code Assist 账号可使用 `/login gemini-login`；凭据与刷新由 Pi 管理。停用公告、账号范围与配置见 [Gemini Login README](gemini-login/README.md)。
 
 ## 开发与验证
 
@@ -104,7 +104,7 @@ npm --prefix helper run check:compat
 | [search/README.md](search/README.md) | 来源选择、缓存与截断、安全边界、费用与排障 |
 | [helper/README.md](helper/README.md) / [中文](helper/README.zh-CN.md) | 调用接口、工具权限、限制、配置与验证命令 |
 | [helper/DESIGN.md](helper/DESIGN.md) | 会话构建、权限转发、取消清理、用量统计与源码索引 |
-| [gemini-login/README.md](gemini-login/README.md) | Google 登录、订阅模型、凭据与项目、额度及验证 |
+| [gemini-login/README.md](gemini-login/README.md) | 旧版 Code Assist 登录、个人入口停用、组织账号与诊断 |
 
 ## License
 

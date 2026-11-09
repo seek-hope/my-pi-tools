@@ -124,6 +124,7 @@ test('onboarding failures include safe eligibility reasons without echoing serve
         },
       },
       signal(),
+      [auth.refresh],
     ),
     (error) => {
       assert.match(error.message, /HTTP 403/);

@@ -24,7 +24,7 @@ export function createGeminiProvider(
           {
             ...original,
             id: id!,
-            name: `${original.name} (subscription)`,
+            name: `${original.name} (Code Assist)`,
             provider: 'gemini-login',
             baseUrl: BASE_URL,
             promptCache: undefined,
@@ -35,7 +35,7 @@ export function createGeminiProvider(
   });
   return {
     id: 'gemini-login',
-    name: 'Google Gemini subscription',
+    name: 'Google Code Assist (legacy)',
     baseUrl: BASE_URL,
     auth: { oauth: createOAuth(dependencies) },
     getModels: () => models.map((model) => structuredClone(model)),

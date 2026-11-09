@@ -1,7 +1,7 @@
 {
   "name": "my-pi-gemini-login",
   "version": "0.1.0",
-  "description": "Google Gemini subscription login and Code Assist provider for Pi",
+  "description": "Legacy Google Code Assist OAuth provider for Pi",
   "type": "module",
   "private": true,
   "license": "MIT",
