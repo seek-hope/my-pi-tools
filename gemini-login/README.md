@@ -1,91 +1,119 @@
-# Gemini Login（旧版 Code Assist）
+# Antigravity ACP for Pi
 
-为 Pi 提供 `gemini-login` 模型 provider，使用旧版 Gemini CLI / Code Assist 的 Google OAuth 入口。仅适用于 Google 仍支持的 Code Assist 账号与许可，例如符合要求的组织 Standard / Enterprise 账号。
+在 Pi 的独立聊天界面中使用官方 Antigravity agent。扩展启动 `agy acp`，通过 [Agent Client Protocol（ACP）](https://antigravity.google/docs/ide/extensions/acp/) 转发消息、工具执行状态、文件修改和权限请求。Google 登录、模型调用、工具执行及会话上下文均由官方客户端管理。
 
-**个人 Google AI Pro / Ultra 订阅不再适用于此入口。** Google 已于 **2026 年 6 月 18 日**停止通过 Gemini CLI / Code Assist 服务个人免费账号及 Google AI Pro / Ultra 用户，并要求迁移至 Antigravity。见 [Google 官方停用公告](https://developers.google.com/gemini-code-assist/docs/deprecations/code-assist-individuals)和 [Gemini CLI 官方说明](https://github.com/google-gemini/gemini-cli/blob/v0.67.0/README.md)。设置项目 ID、重新授权或升级订阅不能恢复这个已停用的个人入口。
+适用于希望通过官方 Antigravity 使用个人 Google AI Pro / Ultra 权益的用户；具体账号资格、可选模型和配额由 Google 决定。本扩展是社区 ACP 客户端，不代表 Google 官方产品。
 
-这是独立扩展，授权流程和接口依据 Gemini CLI v0.67.0。它不实现 Antigravity 登录，也不能将个人订阅转换成通用 Gemini API Key。组织许可另有服务生命周期，账号资格和模型开放范围仍以 Google 为准。
+包名和目录保留为 `my-pi-gemini-login` / `gemini-login`，入口是 `/antigravity`。它不注册 Pi 模型 provider，也不注册供模型或 codemode 调用的代理工具。
 
-## 安装与登录（符合要求的组织账号）
+## 安装与登录
 
-需要 Node.js ≥ 22.19、Pi ≥ 1.5.0 稳定版。在仓库根目录执行：
+需要 Node.js ≥ 22.19、Pi ≥ 1.5.0 稳定版，以及支持 ACP 的官方 Antigravity CLI。本项目已用 Linux 上的 `agy 1.5.3` 验证真实 ACP 握手和未登录响应。
+
+1. 按 [Google 安装说明](https://antigravity.google/docs/getting-started/) 安装 Antigravity CLI，然后确认：
+
+   ```bash
+   agy --version
+   agy acp --help
+   ```
+
+2. 在本仓库根目录安装 Pi 扩展：
+
+   ```bash
+   npm --prefix gemini-login ci --ignore-scripts
+   pi install ./gemini-login
+   ```
+
+3. 在 Pi 中执行：
+
+   ```text
+   /reload
+   /antigravity login
+   ```
+
+   浏览器登录由官方 `agy` 发起，选择你的个人 Google 账号。凭据由官方客户端保存；无需把授权码或 token 发给 Pi 的主模型。已有有效登录时，直接 `/antigravity` 即可。
+
+SSH 环境或浏览器不能自动打开时，在普通终端运行：
 
 ```bash
-npm --prefix gemini-login ci --ignore-scripts
-pi install ./gemini-login
+agy acp --login
 ```
 
-在 Pi 中执行：
+按官方提示完成登录，再重新打开 `/antigravity`。扩展不实现自己的 OAuth、不读取或迁移旧 Pi 登录凭据，也不自动切换到 API Key / Vertex 认证。配额及已启用的额外额度按 Google 账号和官方客户端设置执行。
 
-```text
-/reload
-/login gemini-login
-```
-
-Pi 中显示名称为 `Google Code Assist (legacy)`，provider ID 仍为 `gemini-login`。打开授权链接，选择拥有相应 Code Assist 组织许可的账号，将 Google 页面显示的授权码粘贴回 Pi。扩展使用 PKCE，不启动本地 HTTP 服务；SSH 环境也可以在本机浏览器完成授权。一次登录最多等待五分钟，取消后可重新执行 `/login`。
-
-登录后通过 `/model` 选择 `gemini-login` 下的模型。也可以启动新会话：
+默认优先使用 `~/.local/bin/agy`，否则从 `PATH` 查找 `agy`。可以显式指定可执行文件路径：
 
 ```bash
-pi --provider gemini-login --model gemini-3.1-pro-preview
+export ANTIGRAVITY_ACP_COMMAND=/absolute/path/to/agy
 ```
 
-当前目录包含以下具体模型。列出模型不表示你的账号已获访问权限；服务端可能返回 403 或 404。
+该值只允许表达可执行文件路径，不能追加参数或 shell 命令。修改环境变量后需在该环境中重新启动 Pi。
 
-| 模型 ID | 显示名称 |
+## 使用
+
+Pi 命令：
+
+| 命令 | 行为 |
 | --- | --- |
-| `gemini-3.1-pro-preview` | Gemini 3.1 Pro Preview |
-| `gemini-3-flash` | Gemini 3.5 Flash，对应官方 CLI 的 Code Assist backend 名称 |
-| `gemini-3.1-flash-lite` | Gemini 3.1 Flash Lite |
-| `gemini-2.5-pro` | Gemini 2.5 Pro |
+| `/antigravity` | 打开聊天界面；载入本 Pi 会话关联的官方会话，或创建新会话 |
+| `/antigravity new` | 明确创建新的官方会话 |
+| `/antigravity login` | 请求官方个人 Google 登录，随后打开会话 |
+| `/antigravity <消息>` | 打开会话并发送第一条消息；不会清除启动期间输入的草稿 |
 
-模型的上下文、图片限制和 thinking 能力复用 Pi 的 Google 模型目录。支持文本与图片输入、流式回答、thinking、工具调用和多轮工具结果；工具既可直接调用，也可通过启用的 codemode 调用。本扩展不额外注册模型工具。
+当前 Pi 任务结束后才能打开界面。这个界面直接与官方 agent 对话，不需要先调用 Pi 的主模型。
 
-## 凭据、项目与额度
+界面内命令：
 
-Access token、refresh token、过期时间和 Code Assist 项目 ID 交由 Pi 的凭据存储管理，默认保存在 Pi agent 目录的 `auth.json`。不要提交或分享该文件。扩展不读取 Gemini CLI 的现有凭据文件，也不另建 token 缓存；Pi 负责串行刷新和保存更新后的凭据。
+| 命令 | 行为 |
+| --- | --- |
+| `/new` | 创建新会话 |
+| `/load <会话 ID>` | 载入指定官方会话；失败时不会自动换成其他会话 |
+| `/login` | 通过官方客户端登录个人 Google 账号 |
+| `/model` | 选择服务端当前提供的模型 |
+| `/config` | 查看和调整服务端提供的设置，包括思考等级 |
+| `/cancel` | 取消当前任务 |
+| `/help` | 显示本地命令及服务端命令列表 |
+| `/exit` | 关闭聊天界面，返回 Pi |
 
-重新登录可切换账号。使用 `/logout` 选择此 provider，可从 Pi 删除凭据；若要撤销 Google 端授权，请使用 Google 账号的第三方应用授权管理页面。
+其余消息和命令发给 Antigravity。模型名和思考等级来自当前服务端响应，不使用写死的模型清单，也不伪装为其他 ACP 客户端获取额外模型。
 
-Google 可能返回账号已关联的项目。组织许可若需要显式指定项目，请使用管理员配置并授予权限的项目，在启动 Pi 前设置：
+- `Enter` 发送，`Shift+Enter` 换行；任务执行期间可以编辑下一条草稿，完成后再发送。
+- `PageUp` / `PageDown` 滚动，`Ctrl+End` 回到底部。
+- `Esc` 取消正在执行的任务，包括待处理的授权；空闲时清空草稿，再按一次返回 Pi。
+- `Ctrl+D` 取消任务并返回 Pi。重复退出或宿主关闭会等待同一次清理。
+- 授权列表用方向键选择、`Enter` 确认；默认选中“取消此授权请求”。“持续允许”等选项的具体范围由官方服务决定。
 
-```bash
-export GEMINI_LOGIN_PROJECT=your-google-cloud-project-id
-pi
-```
+工具输出、修改前后文本和计划会显示在对话中。当前支持文本输入；接收的图片、音频以占位文字显示，不支持附件上传或原生表单，未声明相应客户端能力。
 
-随后重新执行 `/login gemini-login`。使用项目 ID，不能填写项目数字编号；该项目仍需具备账号所要求的 Code Assist 权限。如果 Google 要求账号验证，请先在官方 Gemini CLI 中完成验证，再重试。
+## 会话与权限
 
-扩展使用 Google 返回的默认 onboarding tier；未返回默认值时，采用官方 CLI 的 `legacy-tier` 回退。账号能否完成初始化由 Google 决定。扩展不主动选择付费升级，也默认不发送 `enabled_credit_types` 来启用额外 Google One AI Credits 消费。达到额度限制时返回错误，交由 Pi 的重试策略处理；不会自动切换至按量付费的 API Key。
+Pi 只保存关联的官方会话 ID、项目路径和所属 Pi 会话 ID，不把主会话历史、系统提示或工具声明发送给 Antigravity。重新打开时通过 `session/load` 载入官方历史；派生到另一个 Pi 会话不会自动继承这条关联。Pi 的树导航不会回滚官方会话上下文，需要独立上下文时使用 `/new`。
 
-Pi 中显示的 token 用量取自 Google 响应，包含缓存与 reasoning 分项。费用显示为零估算，表示不按 Gemini API 单价计费，不能用于判断订阅价格、剩余额度或 Google 最终账单。
+Antigravity 使用自己的工具、项目规则、MCP 配置和权限策略。**这些工具不经过 Pi 的 `tool_call` / `executeTool` 权限 hook。** 官方客户端已有的允许或拒绝规则仍会生效，扩展只能展示服务端发来的权限请求；它不添加跳过权限的参数，也不代替用户批准请求。Helper 的只读范围和父权限 hook 不受影响。
 
-## 常见问题
+取消时先撤销所有待处理授权，再发送 `session/cancel`；最多等待 5 秒确认。若服务端没有响应，会关闭扩展启动的本地 ACP 进程，并提示在官方客户端确认任务状态。不会终止共享 daemon 或其他进程；本地进程退出也不能证明远端任务已经停止。
 
-- 看不到 provider：确认安装成功并执行 `/reload`。查看扩展加载错误，而不是反复授权。
-- `UNSUPPORTED_CLIENT`：Google 拒绝了这个客户端。个人免费及 Pro / Ultra 入口已经停用，请按官方公告迁移；反复授权无法恢复。
-- `UNKNOWN` 或其他新错误码：扩展会保留服务端错误码和脱敏后的 `reasonMessage`，并标明失败阶段。不能只根据 `UNKNOWN` 推断地区、年龄或项目问题。
-- 401 或 token 刷新失败：符合要求的组织账号可重新执行 `/login gemini-login`。网络错误和取消不会覆盖旧凭据。
-- 提示缺少项目：Google 完成初始化后仍未返回项目。先查看是否同时出现账号资格限制；确实需要自有项目时再设置 `GEMINI_LOGIN_PROJECT`。
-- 403：检查组织许可、账号资格及项目权限。初始化失败时会附上 Google 返回的资格原因和说明。诊断会隐藏本次登录的 token、授权码、配置的项目 ID 和邮箱，不保存完整响应或额外凭据副本。
-- 404：该模型或资源可能尚未向账号开放，尝试目录中的其他模型。
-- 429：CLI / Code Assist 额度或速率受到限制，等待恢复；网页聊天是否可用不能证明 CLI 额度仍有剩余。
-- 流中断或缺少结束事件：返回错误并保留已收到的文本，避免把不完整回答当作成功。
+显示内容与工具合并缓存有独立容量限制，截断会显示标记，不改变官方会话上下文。进程 stderr 会被消费，但不会复制到 Pi 对话；需要更详细诊断时查看官方 CLI 日志。ACP 格式错误、连接中断和非正常结束原因会明确显示，不能视作成功回答。该 agent 的用量不会合并到 Pi 主模型统计。
 
-不支持 Antigravity、Gemini 网页会话 cookie、服务账号或 Vertex AI。这些是不同的认证与产品入口。
+## 排障
+
+- **找不到 CLI**：确认 `agy acp --help` 可用，或设置 `ANTIGRAVITY_ACP_COMMAND` 为完整路径。
+- **Authentication required**：在界面内 `/login`；SSH 环境用终端 `agy acp --login`，再重新打开界面。
+- **载入失败**：确认会话属于当前官方账号；使用 `/new` 可明确开始新会话。
+- **模型不可用、配额耗尽或账号不合格**：以 Google 返回的结果为准，扩展不会换账号、换客户端身份或自动切换计费方式。
+- **只看到旧的 `/login gemini-login`**：执行 `/reload`。当前版本已移除旧 Code Assist provider，不再使用 `GEMINI_LOGIN_PROJECT`。
+
+Google 明确区分 [官方 ACP 客户端集成](https://antigravity.google/docs/ide/extensions/acp/) 与 [第三方复用产品 OAuth、封装消费者 headless 模式](https://antigravity.google/docs/faq/)。本扩展实现的是交互式 ACP 客户端，不把官方登录 token 转接成 Pi 的模型 API。
 
 ## 开发与验证
 
 ```bash
+npm --prefix gemini-login ci --ignore-scripts
 npm --prefix gemini-login run check
 npm --prefix gemini-login test
 npm --prefix gemini-login run check:format
 ```
 
-测试使用模拟 HTTP 响应覆盖授权码与 PKCE、项目 onboarding、停用客户端与未知错误诊断、凭据脱敏、刷新与取消、SSE 分片、图片和工具往返、错误与用量，并在真实 Pi SDK 会话内执行直接工具和 codemode 调用。它们不连接 Google，不能证明账号具备资格，也不能证明个人订阅入口仍然可用。CI 在 Node 22/24 上检查 Pi 1.5.0 基线与最新稳定版。
+离线测试使用独立 ACP 测试进程，覆盖协议校验、会话恢复、动态模型设置、真实临时文件的授权/拒绝、并发授权取消、退出清理、损坏数据、显示容量、中文终端布局和原生 Pi 扩展加载。测试不连接 Google，不消耗订阅额度。
 
-实际验收需本人登录，然后让所选 Gemini 模型回答简单问题并读取一个测试文件；这些请求会消耗账号额度。不要将授权码或 token 粘贴到模型对话中，应仅粘贴到 Pi 的登录输入框。
-
-实现入口为 [src/index.ts](src/index.ts)，OAuth 与项目识别位于 [src/auth.ts](src/auth.ts)，请求转换和流式适配位于 [src/stream.ts](src/stream.ts)。网络请求固定使用 Google OAuth 与 Code Assist 域名并拒绝 HTTP 重定向。调用方的 payload / response / fetch hooks 仍遵循 Pi provider 接口，属于受信任的宿主扩展代码。
-
-参考：[官方认证说明](https://geminicli.com/docs/get-started/authentication/)、[额度说明](https://geminicli.com/docs/quota-and-pricing/)、[官方实现 v0.67.0](https://github.com/google-gemini/gemini-cli/tree/v0.67.0/packages/core/src/code_assist)。公共 installed-app OAuth 客户端标识的来源见 [NOTICE](NOTICE)。
+真实官方握手与未登录错误验证不等于账号可用性验收；个人账号的登录、模型权限和实际回答需要在官方登录完成后验证。CI 覆盖 Node 22/24 与 Pi 1.5.0 / 最新稳定版。

@@ -1,5 +1,0 @@
-Google Code Assist protocol and installed-application OAuth constants were reviewed against
-Google Gemini CLI v0.67.0, Copyright 2025 Google LLC, Apache-2.0.
-https://github.com/google-gemini/gemini-cli/tree/v0.67.0/packages/core/src/code_assist
-The public OAuth client secret is an installed-application identifier, not a user credential.
-This independent Pi integration is not an official Google product.

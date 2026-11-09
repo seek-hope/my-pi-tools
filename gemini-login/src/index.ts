@@ -1,50 +1,93 @@
-import type { Provider } from '@earendil-works/pi-ai';
-import { googleProvider } from './google.mjs';
-import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
-import { createOAuth, type AuthDependencies } from './auth.ts';
-import { BASE_URL } from './http.ts';
-import { streamGemini } from './stream.ts';
+import type { ExtensionAPI, ExtensionCommandContext } from '@earendil-works/pi-coding-agent';
+import { executable, errorText } from './acp.ts';
+import { Conversation } from './conversation.ts';
+import { ChatScreen } from './ui.ts';
 
-export function createGeminiProvider(
-  dependencies: AuthDependencies = {},
-): Provider<'google-generative-ai'> {
-  const google = googleProvider().getModels();
-  // Code Assist's stable Flash backend is named gemini-3-flash (Gemini CLI v0.67.0).
-  // Reuse Pi's capabilities and input limits, not AI Studio's pay-as-you-go prices.
-  const entries = [
-    ['gemini-3.1-pro-preview', 'gemini-3.1-pro-preview'],
-    ['gemini-3.5-flash', 'gemini-3-flash'],
-    ['gemini-3.1-flash-lite', 'gemini-3.1-flash-lite'],
-    ['gemini-2.5-pro', 'gemini-2.5-pro'],
-  ];
-  const models = entries.flatMap(([source, id]) => {
-    const original = google.find((model) => model.id === source);
-    return original
-      ? [
-          {
-            ...original,
-            id: id!,
-            name: `${original.name} (Code Assist)`,
-            provider: 'gemini-login',
-            baseUrl: BASE_URL,
-            promptCache: undefined,
-            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-          },
-        ]
-      : [];
-  });
-  return {
-    id: 'gemini-login',
-    name: 'Google Code Assist (legacy)',
-    baseUrl: BASE_URL,
-    auth: { oauth: createOAuth(dependencies) },
-    getModels: () => models.map((model) => structuredClone(model)),
-    stream: (model, context, options) => streamGemini(model, context, options, dependencies.fetch),
-    streamSimple: (model, context, options) =>
-      streamGemini(model, context, options, dependencies.fetch),
-  };
+const ENTRY = 'my-pi-antigravity-session';
+
+export function rememberedSession(
+  ctx: Pick<ExtensionCommandContext, 'cwd' | 'sessionManager'>,
+): string | undefined {
+  const owner = ctx.sessionManager.getSessionId();
+  for (const entry of [...ctx.sessionManager.getBranch()].reverse()) {
+    if (entry.type !== 'custom' || entry.customType !== ENTRY) continue;
+    const data = entry.data;
+    if (!data || typeof data !== 'object') continue;
+    if (
+      'version' in data &&
+      data.version === 1 &&
+      'owner' in data &&
+      data.owner === owner &&
+      'cwd' in data &&
+      data.cwd === ctx.cwd &&
+      'sessionId' in data &&
+      typeof data.sessionId === 'string' &&
+      data.sessionId.length > 0 &&
+      data.sessionId.length <= 1024
+    )
+      return data.sessionId;
+  }
+  return undefined;
 }
 
-export default function geminiLogin(pi: ExtensionAPI) {
-  pi.registerProvider(createGeminiProvider({ projectId: process.env.GEMINI_LOGIN_PROJECT }));
+export default function antigravity(pi: ExtensionAPI) {
+  let active: ChatScreen | undefined;
+  let opening = false;
+  pi.registerCommand('antigravity', {
+    description: '在 Pi 中打开官方 Antigravity ACP 对话（个人 Google 登录）',
+    getArgumentCompletions: (prefix) =>
+      ['new', 'login']
+        .filter((value) => value.startsWith(prefix))
+        .map((value) => ({ value, label: value })),
+    handler: async (args, ctx) => {
+      if (ctx.mode !== 'tui') {
+        ctx.ui.notify('Antigravity ACP 对话需要 Pi 交互界面。', 'error');
+        return;
+      }
+      if (opening || active) {
+        ctx.ui.notify('Antigravity 对话已经打开。', 'info');
+        return;
+      }
+      if (!ctx.isIdle() || ctx.hasPendingMessages()) {
+        ctx.ui.notify('请先结束当前 Pi 任务，再打开 Antigravity。', 'warning');
+        return;
+      }
+      opening = true;
+      let conversation: Conversation | undefined;
+      try {
+        const command = await executable();
+        const input = args.trim();
+        const saved = input === 'new' ? undefined : rememberedSession(ctx);
+        const initial = ['new', 'login'].includes(input) ? '' : input;
+        const owner = ctx.sessionManager.getSessionId();
+        await ctx.ui.custom<void>((tui, theme, keys, done) => {
+          conversation = new Conversation(ctx.cwd, { command }, (sessionId) => {
+            pi.appendEntry(ENTRY, { version: 1, owner, cwd: ctx.cwd, sessionId });
+          });
+          const screen = new ChatScreen(conversation, tui, theme, keys, done);
+          active = screen;
+          const current = conversation;
+          queueMicrotask(() => {
+            void current
+              .start(saved, input === 'login')
+              .then(() => {
+                if (initial && current.state === 'ready') return current.prompt(initial);
+                else if (initial) current.note('初始消息尚未发送；登录后请重新输入。');
+              })
+              .catch((error) => current.note(errorText(error)));
+          });
+          return screen;
+        });
+      } catch (error) {
+        ctx.ui.notify(errorText(error), 'error');
+      } finally {
+        await conversation?.close();
+        active = undefined;
+        opening = false;
+      }
+    },
+  });
+  pi.on('session_shutdown', async () => {
+    await active?.leave();
+  });
 }

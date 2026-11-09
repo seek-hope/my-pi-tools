@@ -9,11 +9,11 @@
 | [CodeGraph](codegraph/README.md) | `pi-codegraph` | 通过原生 MCP 查询源码、调用路径和修改影响，用 `/codegraph` 管理索引 | CodeGraph CLI |
 | [Search](search/README.md) | `pi-deepseek-web` | DeepSeek + Exa 网页搜索与抓取，合并结果并处理单源失败 | 至少一个 provider 的 API Key |
 | [Helper](helper/README.zh-CN.md) | `my-pi-helper` | 临时只读 Pi 会话，使用原生上下文管理并保留主会话权限 hook | 宿主工具与已配置模型 |
-| [Gemini Login](gemini-login/README.md) | `my-pi-gemini-login` | 旧版 Code Assist OAuth provider；个人 Pro / Ultra 入口已停用 | 符合 Google 当前要求的组织 Code Assist 许可 |
+| [Antigravity ACP](gemini-login/README.md) | `my-pi-gemini-login` | 在 Pi 中与官方 Antigravity agent 对话，显示工具执行和权限请求 | 官方 Antigravity CLI 与 Google 登录 |
 
 ## 环境与安装
 
-要求 Node.js **≥ 22.19**。Helper 和 Gemini Login 支持 Pi **≥ 1.5.0** 稳定版；CodeGraph 的 peer 范围为 `>=1.3.0`，Search 为 `*`，具体测试范围见各包文档。CodeGraph CLI 使用 **1.6.2**。CI 覆盖 Linux，其他平台暂无测试覆盖。
+要求 Node.js **≥ 22.19**。Helper 和 Antigravity ACP 支持 Pi **≥ 1.5.0** 稳定版；CodeGraph 的 peer 范围为 `>=1.3.0`，Search 为 `*`，具体测试范围见各包文档。CodeGraph CLI 使用 **1.6.2**。CI 覆盖 Linux，其他平台暂无测试覆盖。
 
 在仓库根目录执行需要的安装命令：
 
@@ -24,7 +24,7 @@ pi install ./helper
 pi install ./gemini-login
 ```
 
-四个包均未发布到 npm，使用本地路径安装。仅对当前项目安装可用 `pi install -l /绝对路径/my-pi-tools/<包>`；临时加载使用 `pi -e <入口文件>`，其中 CodeGraph、Search 和 Gemini Login 的入口是 `src/index.ts`，Helper 是 `extensions/index.ts`。在已运行的 Pi 中执行 `/reload`。
+四个包均未发布到 npm，使用本地路径安装。仅对当前项目安装可用 `pi install -l /绝对路径/my-pi-tools/<包>`；临时加载使用 `pi -e <入口文件>`，其中 CodeGraph、Search 和 Antigravity ACP 的入口是 `src/index.ts`，Helper 是 `extensions/index.ts`。在已运行的 Pi 中执行 `/reload`。
 
 ## 快速上手
 
@@ -66,9 +66,9 @@ export EXA_API_KEY=...
 
 只读工具与上下文隔离不等于文件系统沙箱；模型回答也不等于独立验收。工具配置、结果字段和其他限制见 [Helper 中文说明](helper/README.zh-CN.md)或 [English README](helper/README.md)。
 
-### Gemini Login
+### Antigravity ACP
 
-此扩展使用旧版 Code Assist 登录入口。Google 已于 2026 年 6 月 18 日停止通过该入口服务个人免费账号和 Google AI Pro / Ultra，当前插件不能把这些个人订阅接入 Pi。符合要求的组织 Code Assist 账号可使用 `/login gemini-login`；凭据与刷新由 Pi 管理。停用公告、账号范围与配置见 [Gemini Login README](gemini-login/README.md)。
+先安装支持 ACP 的官方 `agy`，然后在 Pi 中执行 `/antigravity login`，通过官方客户端登录个人 Google 账号。之后用 `/antigravity` 打开独立聊天界面，选择模型、发送消息并处理权限请求。Antigravity 管理会话、工具和配额，Pi 提供操作界面；它的工具不经过 Pi 的权限 hook。此扩展不注册 Pi 模型 provider 或代理工具。安装、取消和会话恢复方式见 [Antigravity ACP README](gemini-login/README.md)。
 
 ## 开发与验证
 
@@ -104,7 +104,7 @@ npm --prefix helper run check:compat
 | [search/README.md](search/README.md) | 来源选择、缓存与截断、安全边界、费用与排障 |
 | [helper/README.md](helper/README.md) / [中文](helper/README.zh-CN.md) | 调用接口、工具权限、限制、配置与验证命令 |
 | [helper/DESIGN.md](helper/DESIGN.md) | 会话构建、权限转发、取消清理、用量统计与源码索引 |
-| [gemini-login/README.md](gemini-login/README.md) | 旧版 Code Assist 登录、个人入口停用、组织账号与诊断 |
+| [gemini-login/README.md](gemini-login/README.md) | 官方 Antigravity ACP 登录、独立聊天界面、权限、取消与会话恢复 |
 
 ## License
 

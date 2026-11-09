@@ -45,7 +45,7 @@ jobs:
       - name: Install Helper dependencies
         working-directory: helper
         run: npm ci --ignore-scripts --no-audit --no-fund
-      - name: Install Gemini Login dependencies
+      - name: Install Antigravity ACP dependencies
         working-directory: gemini-login
         run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Resolve Pi host version
@@ -63,7 +63,7 @@ jobs:
           npm --prefix codegraph install --no-save --package-lock=false --ignore-scripts --no-audit --no-fund "@earendil-works/pi-coding-agent@$PI_TEST_VERSION"
           npm --prefix search install --no-save --package-lock=false --ignore-scripts --no-audit --no-fund "@earendil-works/pi-coding-agent@$PI_TEST_VERSION" "@earendil-works/pi-tui@$PI_TEST_VERSION"
           npm --prefix helper install --no-save --package-lock=false --ignore-scripts --no-audit --no-fund "@earendil-works/pi-ai@$PI_TEST_VERSION" "@earendil-works/pi-coding-agent@$PI_TEST_VERSION"
-          npm --prefix gemini-login install --no-save --package-lock=false --ignore-scripts --no-audit --no-fund "@earendil-works/pi-ai@$PI_TEST_VERSION" "@earendil-works/pi-coding-agent@$PI_TEST_VERSION"
+          npm --prefix gemini-login install --no-save --package-lock=false --ignore-scripts --no-audit --no-fund "@earendil-works/pi-coding-agent@$PI_TEST_VERSION" "@earendil-works/pi-tui@$PI_TEST_VERSION"
       - name: Typecheck and test
         env:
           PI_OFFLINE: "1"

@@ -5,8 +5,6 @@
     "moduleResolution": "NodeNext",
     "strict": true,
     "noEmit": true,
-    "allowJs": true,
-    "checkJs": true,
     "allowImportingTsExtensions": true,
     "skipLibCheck": true,
     "noUncheckedIndexedAccess": true,
@@ -15,7 +13,6 @@
     ]
   },
   "include": [
-    "src/**/*.ts",
-    "src/**/*.mjs"
+    "src/**/*.ts"
   ]
 }
