@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { join } from 'node:path';
 import { DefaultResourceLoader, SettingsManager, initTheme } from '@earendil-works/pi-coding-agent';
-import { matchesKey } from '@earendil-works/pi-tui';
+import { testKeys, testTheme } from './ui-fixtures.mjs';
 import { agentPath, until } from './fixtures.mjs';
 import antigravity, { rememberedSession } from '../src/index.ts';
 
@@ -75,6 +75,7 @@ test('command preserves drafts during startup and shutdown awaits an already-run
     await rm(cwd, { recursive: true, force: true });
   });
   initTheme('dark', false);
+  const keys = testKeys(t);
   const commands = new Map(),
     events = new Map(),
     entries = [];
@@ -95,18 +96,10 @@ test('command preserves drafts during startup and shutdown awaits an already-run
       notify: (message) => assert.fail(message),
       custom: (factory) =>
         new Promise((resolve) => {
-          screen = factory(
-            { terminal: { rows: 30 }, requestRender() {} },
-            { fg: (_color, value) => value },
-            {
-              matches: (value, action) =>
-                action === 'tui.select.cancel' && matchesKey(value, 'escape'),
-            },
-            () => {
-              done++;
-              resolve();
-            },
-          );
+          screen = factory({ terminal: { rows: 30 }, requestRender() {} }, testTheme, keys, () => {
+            done++;
+            resolve();
+          });
         }),
     },
   };
@@ -124,12 +117,22 @@ test('command preserves drafts during startup and shutdown awaits an already-run
   );
   assert.match(screen.render(100).join('\n'), /draft entered while connecting/);
   assert.equal(entries[0].data.owner, 'owner');
+  screen.submit('/permissions manual');
+  assert.equal(entries.at(-1).data.approvalMode, 'manual');
   const firstExit = screen.leave();
   assert.equal(screen.leave(), firstExit);
   await events.get('session_shutdown')();
   assert.equal(screen.conversation.state, 'closed');
   await command;
   assert.equal(done, 1);
+  const previous = screen;
+  const reopened = commands.get('antigravity').handler('new', ctx);
+  t.after(() => reopened);
+  await until(() => screen !== previous && screen.conversation.state === 'ready');
+  assert.equal(screen.conversation.approvalMode, 'manual');
+  await screen.leave();
+  await reopened;
+  assert.equal(done, 2);
 });
 
 test('session references use the current branch, project and owning Pi session only', () => {

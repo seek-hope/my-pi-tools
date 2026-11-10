@@ -8,7 +8,7 @@ if (scenario === 'ignore-term') process.on('SIGTERM', () => {});
 let authenticated = scenario !== 'auth';
 let cwd;
 let nextSession = 0;
-const sessions = new Set(['saved-session']);
+const sessions = new Set(['saved-session', 'older-session']);
 const waits = new Map();
 let config = [
   {
@@ -59,7 +59,10 @@ const app = agent()
     return {
       protocolVersion: scenario === 'version' ? 9 : 1,
       agentInfo: { name: 'Test ACP agent', version: '1' },
-      agentCapabilities: { loadSession: true },
+      agentCapabilities: {
+        loadSession: true,
+        sessionCapabilities: scenario === 'no-list' ? {} : { list: {} },
+      },
       authMethods: [{ id: 'oauth-personal', name: 'Google' }],
     };
   })
@@ -75,6 +78,20 @@ const app = agent()
     const sessionId = `session-${++nextSession}`;
     sessions.add(sessionId);
     return { sessionId, configOptions: config };
+  })
+  .onRequest('session/list', async ({ params }) => {
+    if (scenario === 'slow-list') await new Promise((resolve) => setTimeout(resolve, 80));
+    if (scenario === 'bad-list') return {};
+    if (params.cwd !== cwd) throw new Error('Missing project filter');
+    return params.cursor
+      ? { sessions: [{ sessionId: 'older-session', cwd, title: 'Earlier research' }] }
+      : {
+          sessions: [
+            { sessionId: 'saved-session', cwd, title: 'Saved research' },
+            { sessionId: 'foreign', cwd: '/other', title: 'Wrong project' },
+          ],
+          nextCursor: 'page-two',
+        };
   })
   .onRequest('session/load', async ({ params, client }) => {
     auth();
@@ -139,12 +156,31 @@ const app = agent()
         });
       return { stopReason: 'end_turn' };
     }
+    if (text === 'steer') {
+      await send(client, id, {
+        sessionUpdate: 'agent_message_chunk',
+        content: { type: 'text', text: 'Steering acknowledged' },
+      });
+      return { stopReason: 'end_turn' };
+    }
+    if (text === 'finish') {
+      for (const resolve of waits.get(id) ?? []) resolve({ stopReason: 'end_turn' });
+      waits.delete(id);
+      return { stopReason: 'end_turn' };
+    }
+    if (text === 'failure') throw new Error('Fixture prompt failed');
+    if (text === 'commands')
+      await send(client, id, {
+        sessionUpdate: 'available_commands_update',
+        availableCommands: [{ name: 'official-command', description: 'Server command' }],
+      });
     if (text === 'wait') {
+      const pending = new Promise((resolve) => waits.set(id, [...(waits.get(id) ?? []), resolve]));
       await send(client, id, {
         sessionUpdate: 'agent_message_chunk',
         content: { type: 'text', text: 'Partial output' },
       });
-      return new Promise((resolve) => waits.set(id, resolve));
+      return pending;
     }
     if (text.startsWith('permission')) {
       const tool = {
@@ -158,11 +194,21 @@ const app = agent()
           { type: 'diff', path: join(cwd, 'allowed.txt'), oldText: null, newText: 'approved' },
         ],
       };
-      await send(client, id, { sessionUpdate: 'tool_call', ...tool });
+      await send(client, id, {
+        sessionUpdate: 'tool_call',
+        ...tool,
+        ...(text === 'permission-overrides'
+          ? { rawInput: { path: 'cached.txt', text: 'different' } }
+          : {}),
+      });
       const ask = (toolCallId, sessionId = id) =>
         client.request('session/request_permission', {
           sessionId,
-          toolCall: { toolCallId, title: tool.title },
+          toolCall: {
+            toolCallId,
+            title: tool.title,
+            ...(text === 'permission-overrides' ? { rawInput: tool.rawInput } : {}),
+          },
           options: [
             { optionId: 'allow', kind: 'allow_once', name: 'Allow once' },
             { optionId: 'deny', kind: 'reject_once', name: 'Deny once' },
@@ -233,10 +279,12 @@ const app = agent()
   })
   .onNotification('session/cancel', ({ params }) => {
     if (scenario === 'ignore-cancel') return;
-    const resolve = waits.get(params.sessionId);
-    if (scenario === 'slow-cancel') setTimeout(() => resolve?.({ stopReason: 'cancelled' }), 100);
-    else resolve?.({ stopReason: 'cancelled' });
-    waits.delete(params.sessionId);
+    const finish = () => {
+      for (const resolve of waits.get(params.sessionId) ?? []) resolve({ stopReason: 'cancelled' });
+      waits.delete(params.sessionId);
+    };
+    if (scenario === 'slow-cancel') setTimeout(finish, 100);
+    else finish();
   });
 
 const connection = app.connect(

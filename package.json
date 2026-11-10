@@ -4,7 +4,7 @@
   "private": true,
   "license": "MIT",
   "type": "module",
-  "description": "Pi extensions: legacy Code Assist OAuth, independent helpers, web tools, and CodeGraph MCP integration",
+  "description": "Pi extensions: Antigravity ACP, independent helpers, web tools, and CodeGraph MCP integration",
   "engines": {
     "node": ">=22.19.0"
   },

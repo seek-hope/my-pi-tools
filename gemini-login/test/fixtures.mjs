@@ -12,7 +12,7 @@ export async function until(condition, message = 'condition', timeout = 5000) {
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
 }
-export async function fixture(t, scenario = 'normal', cancelMs = 100) {
+export async function fixture(t, scenario = 'normal', cancelMs = 100, reviewer) {
   const cwd = await mkdtemp(join(tmpdir(), 'pi-acp-test-'));
   const remembered = [];
   const conversation = new Conversation(
@@ -29,6 +29,7 @@ export async function fixture(t, scenario = 'normal', cancelMs = 100) {
     },
     (id) => remembered.push(id),
     cancelMs,
+    reviewer,
   );
   t.after(async () => {
     await conversation.close();

@@ -14,6 +14,7 @@ const names = [
   'AuthenticateResponse',
   'NewSessionResponse',
   'LoadSessionResponse',
+  'ListSessionsResponse',
   'SetSessionConfigOptionResponse',
   'PromptResponse',
 ] as const;

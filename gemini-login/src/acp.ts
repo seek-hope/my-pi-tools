@@ -19,6 +19,8 @@ import {
   type NewSessionRequest,
   type NewSessionResponse,
   type LoadSessionRequest,
+  type ListSessionsRequest,
+  type ListSessionsResponse,
   type LoadSessionResponse,
   type SetSessionConfigOptionRequest,
   type SetSessionConfigOptionResponse,
@@ -33,6 +35,7 @@ interface Rpc {
   authenticate: [AuthenticateRequest, AuthenticateResponse];
   'session/new': [NewSessionRequest, NewSessionResponse];
   'session/load': [LoadSessionRequest, LoadSessionResponse];
+  'session/list': [ListSessionsRequest, ListSessionsResponse];
   'session/set_config_option': [SetSessionConfigOptionRequest, SetSessionConfigOptionResponse];
   'session/prompt': [PromptRequest, PromptResponse];
 }
@@ -41,11 +44,12 @@ const responses: Record<keyof Rpc, Shape> = {
   authenticate: 'AuthenticateResponse',
   'session/new': 'NewSessionResponse',
   'session/load': 'LoadSessionResponse',
+  'session/list': 'ListSessionsResponse',
   'session/set_config_option': 'SetSessionConfigOptionResponse',
   'session/prompt': 'PromptResponse',
 };
 
-export const VERSION = '0.2.0';
+export const VERSION = '0.3.0';
 export const CANCELLED: RequestPermissionResponse = { outcome: { outcome: 'cancelled' } };
 
 /** Terminal text only: never replay control sequences from a subprocess. */

@@ -18,15 +18,22 @@ import {
   type LaunchOptions,
 } from './acp.ts';
 
+import type { ApprovalReviewer } from './approval.ts';
+
 export interface Entry {
   kind: 'user' | 'assistant' | 'thinking' | 'tool' | 'notice' | 'plan';
   text: string;
   toolId?: string;
+  toolStatus?: ToolCallUpdate['status'];
   messageId?: string | null;
 }
 export interface Permission {
   request: RequestPermissionRequest;
   answer(optionId?: string): void;
+  reviewing: boolean;
+  reviewReason?: string;
+  review(): void;
+  cancelReview(reason?: string): void;
 }
 export type State =
   | 'connecting'
@@ -55,10 +62,14 @@ function cachedTool(tool: ToolCallUpdate): ToolCallUpdate {
     kind: tool.kind,
     rawInput: compact(tool.rawInput),
     rawOutput: compact(tool.rawOutput),
-    locations: tool.locations
-      ?.slice(0, 100)
-      .map((location) => ({ ...location, path: bounded(location.path) })),
-    content: tool.content?.slice(0, 100).map((item) => {
+    locations: tool.locations?.slice(0, 100).map((location, index) => ({
+      ...location,
+      path:
+        tool.locations!.length > 100 && index === 99 ? '[显示内容已截断]' : bounded(location.path),
+    })),
+    content: tool.content?.slice(0, 100).map((item, index) => {
+      if (tool.content!.length > 100 && index === 99)
+        return { type: 'content', content: { type: 'text', text: '[显示内容已截断]' } };
       if (item.type === 'content')
         return {
           type: 'content',
@@ -136,13 +147,28 @@ export class Conversation {
   private readonly remember: (id: string) => void;
   private readonly tools = new Map<string, ToolCallUpdate>();
   private turn?: Promise<void>;
+  private finishTurn?: () => void;
+  private pendingPrompts = 0;
+  lastStopReason?: string;
   private turnAbort?: AbortController;
   private stopPromise?: Promise<void>;
   private cancelPromise?: Promise<void>;
   private requestedSession?: string;
   private cancelMs: number;
+  readonly reviewer?: ApprovalReviewer;
+  approvalMode: 'auto' | 'manual';
+  autoApproved = 0;
+  approvalChanged: () => void = () => {};
 
-  constructor(cwd: string, launch: LaunchOptions, remember: (id: string) => void, cancelMs = 5000) {
+  constructor(
+    cwd: string,
+    launch: LaunchOptions,
+    remember: (id: string) => void,
+    cancelMs = 5000,
+    reviewer?: ApprovalReviewer,
+  ) {
+    this.reviewer = reviewer;
+    this.approvalMode = reviewer ? 'auto' : 'manual';
     this.cwd = cwd;
     this.remember = remember;
     this.cancelMs = cancelMs;
@@ -200,7 +226,9 @@ export class Conversation {
       ? 'disconnected'
       : authRequired || !this.sessionId
         ? 'login'
-        : 'ready';
+        : this.turn
+          ? 'running'
+          : 'ready';
     this.note(errorText(error));
   }
   private reset() {
@@ -211,6 +239,7 @@ export class Conversation {
     this.commands = [];
     this.title = 'Antigravity';
     this.trimmed = false;
+    this.lastStopReason = undefined;
   }
 
   async start(sessionId?: string, loginFirst = false): Promise<void> {
@@ -300,33 +329,82 @@ export class Conversation {
     }
   }
 
-  async prompt(text: string): Promise<void> {
-    if (this.state !== 'ready' || !this.sessionId || !text.trim()) return;
-    if (text.length > 120_000) {
-      this.note('单条消息超过 120,000 字符，请缩短后发送。');
+  async listSessions(cursor?: string) {
+    if (this.state !== 'ready' || this.turn) return;
+    if (!this.info?.agentCapabilities?.sessionCapabilities?.list) {
+      this.note('官方服务未提供会话列表；可用 /resume <会话 ID> 载入。');
       return;
     }
+    this.state = 'busy';
+    this.emit();
+    try {
+      const response = await this.process.request(
+        'session/list',
+        { cwd: this.cwd, cursor },
+        requestOptions(this.lifetime.signal),
+      );
+      if (this.lifetime.signal.aborted) return;
+      this.state = 'ready';
+      this.emit();
+      return {
+        ...response,
+        sessions: response.sessions.filter(
+          (session) => session.cwd === this.cwd && session.sessionId.length <= 1024,
+        ),
+      };
+    } catch (error) {
+      this.failure(error);
+    }
+  }
+
+  async prompt(text: string): Promise<boolean> {
+    if (!['ready', 'running'].includes(this.state) || !this.sessionId || !text.trim()) return false;
+    if (text.length > 120_000) {
+      this.note('单条消息超过 120,000 字符，请缩短后发送。');
+      return false;
+    }
+    // Antigravity accepts another prompt as steering while the original turn is
+    // still running. A quick steering acknowledgement must not finish that turn
+    // or revoke its pending permissions.
+    if (!this.turn) {
+      this.turnAbort = new AbortController();
+      this.lastStopReason = undefined;
+      this.turn = new Promise<void>((resolve) => {
+        this.finishTurn = resolve;
+      });
+    }
+    this.pendingPrompts++;
+    for (const permission of this.permissions)
+      if (permission.reviewing) permission.cancelReview('用户指令已更新，请人工确认');
     this.state = 'running';
-    this.turnAbort = new AbortController();
     this.add({ kind: 'user', text });
-    this.turn = (async () => {
-      try {
-        const response = await this.process.request('session/prompt', {
-          sessionId: this.sessionId!,
-          prompt: [{ type: 'text', text }],
-        });
-        if (this.lifetime.signal.aborted || this.process.connection.signal.aborted) return;
-        this.state = 'ready';
-        if (response.stopReason !== 'end_turn') this.note(`本轮结束：${response.stopReason}`);
-      } catch (error) {
-        this.failure(error);
-      } finally {
+    try {
+      const response = await this.process.request('session/prompt', {
+        sessionId: this.sessionId,
+        prompt: [{ type: 'text', text }],
+      });
+      if (this.lifetime.signal.aborted || this.process.connection.signal.aborted) return false;
+      if (response.stopReason !== 'end_turn') {
+        this.lastStopReason = response.stopReason;
+        this.note(`本轮结束：${response.stopReason}`);
+      } else this.lastStopReason ??= 'end_turn';
+      return response.stopReason === 'end_turn';
+    } catch (error) {
+      this.lastStopReason = 'error';
+      this.failure(error);
+      return false;
+    } finally {
+      this.pendingPrompts--;
+      if (!this.pendingPrompts) {
+        const finish = this.finishTurn;
         this.turnAbort?.abort();
         this.turn = undefined;
-        this.emit();
+        this.finishTurn = undefined;
+        if (this.state === 'running' || this.state === 'cancelling') this.state = 'ready';
+        finish?.();
       }
-    })();
-    await this.turn;
+      this.emit();
+    }
   }
 
   async configure(option: SessionConfigOption, value: string | boolean): Promise<void> {
@@ -376,6 +454,24 @@ export class Conversation {
       case 'tool_call':
       case 'tool_call_update': {
         const previous = this.tools.get(update.toolCallId) ?? { toolCallId: update.toolCallId };
+        for (const permission of this.permissions) {
+          if (permission.request.toolCall.toolCallId !== update.toolCallId) continue;
+          const changed = (['rawInput', 'locations', 'kind', 'title', 'content'] as const).some(
+            (key) =>
+              update[key] != null &&
+              JSON.stringify(update[key]) !== JSON.stringify(permission.request.toolCall[key]),
+          );
+          if (changed) {
+            permission.request = {
+              ...permission.request,
+              toolCall: {
+                ...permission.request.toolCall,
+                ...Object.fromEntries(Object.entries(update).filter(([, value]) => value != null)),
+              },
+            };
+            permission.cancelReview('操作参数已更新，请人工确认');
+          }
+        }
         const tool = { ...previous };
         // Null means unchanged in ACP partial tool updates.
         for (const [key, value] of Object.entries(update))
@@ -394,9 +490,16 @@ export class Conversation {
         const entry = this.entries.find((item) => item.toolId === tool.toolCallId);
         if (entry) {
           entry.text = toolText(tool);
+          entry.toolStatus = tool.status;
           this.trim();
           this.emit();
-        } else this.add({ kind: 'tool', toolId: tool.toolCallId, text: toolText(tool) });
+        } else
+          this.add({
+            kind: 'tool',
+            toolId: tool.toolCallId,
+            toolStatus: tool.status,
+            text: toolText(tool),
+          });
         break;
       }
       case 'plan':
@@ -428,6 +531,17 @@ export class Conversation {
     }
   }
 
+  setApprovalMode(mode: 'auto' | 'manual') {
+    if (this.approvalMode === mode) return;
+    this.approvalMode = mode;
+    this.approvalChanged();
+    for (const permission of this.permissions) {
+      if (mode === 'manual') permission.cancelReview('已切换为人工审核');
+      else permission.review();
+    }
+    this.emit();
+  }
+
   private permission(
     request: RequestPermissionRequest,
     signal: AbortSignal,
@@ -443,7 +557,51 @@ export class Conversation {
     const combined = AbortSignal.any([signal, this.lifetime.signal, this.turnAbort.signal]);
     return new Promise((resolve) => {
       let settled = false;
+      let reviewController: AbortController | undefined;
       const permission: Permission = {
+        reviewing: false,
+        review: () => {
+          if (settled || combined.aborted || this.approvalMode !== 'auto' || !this.reviewer) return;
+          reviewController?.abort();
+          const controller = (reviewController = new AbortController());
+          const reviewSignal = AbortSignal.any([combined, controller.signal]);
+          const snapshot = JSON.stringify(permission.request);
+          permission.reviewing = true;
+          permission.reviewReason = undefined;
+          this.emit();
+          const task = this.entries
+            .filter((entry) => entry.kind === 'user')
+            .slice(-6)
+            .map((entry) => entry.text)
+            .join('\n\n');
+          void this.reviewer
+            .review(structuredClone(permission.request), task, this.cwd, reviewSignal)
+            .catch(() => ({ approve: false, reason: '自动审核不可用，请人工确认' }))
+            .then((decision) => {
+              if (settled || reviewSignal.aborted || reviewController !== controller) return;
+              const unchanged = snapshot === JSON.stringify(permission.request);
+              permission.reviewReason = unchanged
+                ? plain(decision.reason)
+                : '操作参数已更新，请人工确认';
+              const option = request.options.find((item) => item.kind === 'allow_once');
+              if (decision.approve && unchanged && this.approvalMode === 'auto' && option) {
+                this.autoApproved++;
+                this.note(
+                  `自动批准本次：${permission.request.toolCall.title ?? permission.request.toolCall.toolCallId} · ${permission.reviewReason}`,
+                );
+                permission.answer(option.optionId);
+              } else {
+                permission.reviewing = false;
+                this.emit();
+              }
+            });
+        },
+        cancelReview: (reason = '自动审核已取消，请人工确认') => {
+          reviewController?.abort();
+          permission.reviewing = false;
+          permission.reviewReason = reason;
+          this.emit();
+        },
         request: {
           ...request,
           toolCall: {
@@ -459,6 +617,8 @@ export class Conversation {
         answer: (optionId) => {
           if (settled) return;
           settled = true;
+          permission.reviewing = false;
+          reviewController?.abort();
           combined.removeEventListener('abort', cancelled);
           const index = this.permissions.indexOf(permission);
           if (index >= 0) this.permissions.splice(index, 1);
@@ -474,7 +634,8 @@ export class Conversation {
       const cancelled = () => permission.answer();
       combined.addEventListener('abort', cancelled, { once: true });
       this.permissions.push(permission);
-      this.emit();
+      if (this.approvalMode === 'auto' && this.reviewer) permission.review();
+      else this.emit();
     });
   }
 
@@ -490,6 +651,7 @@ export class Conversation {
   private async cancelTurn(): Promise<void> {
     const turn = this.turn!;
     this.state = 'cancelling';
+    this.lastStopReason = 'cancelled';
     this.turnAbort?.abort();
     this.emit();
     void this.process.connection.agent

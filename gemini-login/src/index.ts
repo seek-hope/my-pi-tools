@@ -2,12 +2,13 @@ import type { ExtensionAPI, ExtensionCommandContext } from '@earendil-works/pi-c
 import { executable, errorText } from './acp.ts';
 import { Conversation } from './conversation.ts';
 import { ChatScreen } from './ui.ts';
+import { createApprovalReviewer } from './approval.ts';
 
 const ENTRY = 'my-pi-antigravity-session';
 
-export function rememberedSession(
+function rememberedReference(
   ctx: Pick<ExtensionCommandContext, 'cwd' | 'sessionManager'>,
-): string | undefined {
+): { sessionId: string; approvalMode: 'auto' | 'manual' } | undefined {
   const owner = ctx.sessionManager.getSessionId();
   for (const entry of [...ctx.sessionManager.getBranch()].reverse()) {
     if (entry.type !== 'custom' || entry.customType !== ENTRY) continue;
@@ -25,9 +26,18 @@ export function rememberedSession(
       data.sessionId.length > 0 &&
       data.sessionId.length <= 1024
     )
-      return data.sessionId;
+      return {
+        sessionId: data.sessionId,
+        approvalMode: 'approvalMode' in data && data.approvalMode === 'manual' ? 'manual' : 'auto',
+      };
   }
   return undefined;
+}
+
+export function rememberedSession(
+  ctx: Pick<ExtensionCommandContext, 'cwd' | 'sessionManager'>,
+): string | undefined {
+  return rememberedReference(ctx)?.sessionId;
 }
 
 export default function antigravity(pi: ExtensionAPI) {
@@ -36,7 +46,7 @@ export default function antigravity(pi: ExtensionAPI) {
   pi.registerCommand('antigravity', {
     description: '在 Pi 中打开官方 Antigravity ACP 对话（个人 Google 登录）',
     getArgumentCompletions: (prefix) =>
-      ['new', 'login']
+      ['new', 'login', 'resume']
         .filter((value) => value.startsWith(prefix))
         .map((value) => ({ value, label: value })),
     handler: async (args, ctx) => {
@@ -57,22 +67,46 @@ export default function antigravity(pi: ExtensionAPI) {
       try {
         const command = await executable();
         const input = args.trim();
-        const saved = input === 'new' ? undefined : rememberedSession(ctx);
-        const initial = ['new', 'login'].includes(input) ? '' : input;
+        const reference = rememberedReference(ctx);
+        const saved = input === 'new' ? undefined : reference?.sessionId;
+        const initial = ['new', 'login', 'resume'].includes(input) ? '' : input;
         const owner = ctx.sessionManager.getSessionId();
         await ctx.ui.custom<void>((tui, theme, keys, done) => {
-          conversation = new Conversation(ctx.cwd, { command }, (sessionId) => {
-            pi.appendEntry(ENTRY, { version: 1, owner, cwd: ctx.cwd, sessionId });
-          });
+          conversation = new Conversation(
+            ctx.cwd,
+            { command, args: ['acp', '--sandbox'] },
+            (sessionId) => {
+              pi.appendEntry(ENTRY, {
+                version: 1,
+                owner,
+                cwd: ctx.cwd,
+                sessionId,
+                approvalMode: conversation?.approvalMode ?? 'auto',
+              });
+            },
+            undefined,
+            createApprovalReviewer(ctx),
+          );
+          if (reference) conversation.approvalMode = reference.approvalMode;
+          conversation.approvalChanged = () => {
+            if (conversation?.sessionId)
+              pi.appendEntry(ENTRY, {
+                version: 1,
+                owner,
+                cwd: ctx.cwd,
+                sessionId: conversation.sessionId,
+                approvalMode: conversation.approvalMode,
+              });
+          };
           const screen = new ChatScreen(conversation, tui, theme, keys, done);
           active = screen;
+          if (initial) screen.enqueueInitial(initial);
           const current = conversation;
           queueMicrotask(() => {
             void current
               .start(saved, input === 'login')
               .then(() => {
-                if (initial && current.state === 'ready') return current.prompt(initial);
-                else if (initial) current.note('初始消息尚未发送；登录后请重新输入。');
+                if (input === 'resume' && current.state === 'ready') return screen.resume();
               })
               .catch((error) => current.note(errorText(error)));
           });
