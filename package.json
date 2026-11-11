@@ -10,7 +10,8 @@
   },
   "scripts": {
     "check": "npm --prefix codegraph run typecheck && npm --prefix search run typecheck && npm --prefix helper run check && npm --prefix gemini-login run check",
-    "test": "npm --prefix codegraph test && npm --prefix search test && npm --prefix helper test && npm --prefix gemini-login test",
+    "test": "npm --prefix codegraph test && npm --prefix search test && npm --prefix helper test && npm --prefix gemini-login test && npm run test:skills",
+    "test:skills": "python3 -B -m unittest discover -s skills-updater/test -v",
     "smoke": "npm --prefix codegraph run smoke"
   }
 }

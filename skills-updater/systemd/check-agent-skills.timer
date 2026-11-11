@@ -1,0 +1,11 @@
+[Unit]
+Description=每日检查 agent 技能上游更新
+
+[Timer]
+OnCalendar=*-*-* 09:00:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=check-agent-skills.service
+
+[Install]
+WantedBy=timers.target

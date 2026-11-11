@@ -1,0 +1,9 @@
+[Unit]
+Description=检查并自动更新 ~/.agents/skills 中的技能
+Documentation=file:%h/.local/state/scientific-skills-check/last-report.txt
+
+[Service]
+Type=oneshot
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=%t/bus
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=%h/.local/bin/check-agent-skills
