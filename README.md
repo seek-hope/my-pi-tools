@@ -70,13 +70,16 @@ export EXA_API_KEY=...
 
 先安装支持 ACP 的官方 `agy`，然后在 Pi 中执行 `/antigravity login`，通过官方客户端登录个人 Google 账号。之后用 `/antigravity` 打开独立聊天界面，选择模型、发送消息并处理权限请求。Antigravity 管理会话、工具和配额，Pi 提供操作界面；它的工具不经过 Pi 的权限 hook。此扩展不注册 Pi 模型 provider 或代理工具。安装、取消和会话恢复方式见 [Antigravity ACP README](gemini-login/README.md)。
 
-## Skills 自动更新
+## 技能与 CLI 自动更新
 
-本机的技能更新脚本与 systemd 定时器由 [skills-updater/](skills-updater/README.md) 管理，保持每天 09:00 后随机延迟 0–10 分钟更新。它是独立主机工具，不是第五个 Pi 扩展；实际技能、来源记录和备份仍保存在用户目录。
+本机的技能更新，以及 `agent-desktop`、`markitdown`、`codegraph`、`agy` 四个 CLI 的更新，统一由 [skills-updater/](skills-updater/README.md) 管理。systemd timer 保持每天 09:00 后随机延迟 0–10 分钟运行；它是独立主机工具，不是第五个 Pi 扩展。实际技能、来源记录、CLI 状态和备份仍保存在用户目录。
 
 ```bash
-python3 skills-updater/install.py --dry-run  # 预览迁移
+python3 skills-updater/install.py --dry-run  # 预览安装/迁移
 python3 skills-updater/install.py            # 备份原入口并链接到仓库
+
+# 手动统一更新；也可用 --skills-only / --tools-only / --dry-run
+~/.local/bin/update-pi-toolchain
 ```
 
 ## 开发与验证
@@ -90,7 +93,7 @@ npm --prefix helper ci --ignore-scripts
 npm --prefix gemini-login ci --ignore-scripts
 
 npm run check   # 四包类型检查
-npm test        # 四包及技能更新器离线测试（另需 Python ≥ 3.10）
+npm test        # 四包及技能/CLI 更新器离线测试（另需 Python ≥ 3.10）
 npm run smoke   # 真实 Pi + CodeGraph 集成测试，需 CodeGraph CLI
 ```
 
@@ -114,7 +117,7 @@ npm --prefix helper run check:compat
 | [helper/README.md](helper/README.md) / [中文](helper/README.zh-CN.md) | 调用接口、工具权限、限制、配置与验证命令 |
 | [helper/DESIGN.md](helper/DESIGN.md) | 会话构建、权限转发、取消清理、用量统计与源码索引 |
 | [gemini-login/README.md](gemini-login/README.md) | 官方 Antigravity ACP 登录、独立聊天界面、权限、取消与会话恢复 |
-| [skills-updater/README.md](skills-updater/README.md) | 技能自动更新、systemd 安装、来源、报告和备份恢复 |
+| [skills-updater/README.md](skills-updater/README.md) | 技能与 CLI 自动更新、systemd 安装、来源、报告和备份恢复 |
 
 ## License
 

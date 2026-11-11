@@ -8,7 +8,7 @@
 
 ## 安装与登录
 
-需要 Node.js ≥ 22.19、Pi ≥ 1.5.0 稳定版，以及支持 ACP 的官方 Antigravity CLI。已在 Linux、Pi 1.5.1、`agy 1.5.3` 上验证真实个人账号回答和自动审核后的命令执行。
+需要 Node.js ≥ 22.19、Pi ≥ 1.5.0 稳定版，以及支持 ACP 的官方 Antigravity CLI。已在 Linux、Pi 1.5.1、`agy 1.5.5` 上验证真实个人账号回答和自动审核后的命令执行。
 
 1. 按 [Google 安装说明](https://antigravity.google/docs/getting-started/) 安装 Antigravity CLI，然后确认：
 
@@ -117,7 +117,7 @@ Pi 命令：
 
 人工列表默认选中“取消此授权请求”；方向键选择、`Enter` 确认，`Esc` 取消本轮全部待处理授权。持续允许选项只有用户明确选中才转发，其范围由官方服务决定。
 
-`agy 1.5.3` 的 ACP 接口实测未提供官方 `auto` 模式；本扩展的自动审核由 Pi 模型完成。[Google 官方 CLI 的 auto 模式](https://antigravity.google/docs/cli/modes/)有自己的可用条件。模型审核依赖提供的数据和模型判断，不能保证识别所有危险行为，也不构成安全沙箱；复杂脚本的真实副作用不能仅凭命令名确定。
+`agy 1.5.5` 的 ACP 已提供官方 `auto` 模式（`1.5.3` 当时没有）；本扩展当前仍使用 Pi 模型审核，不会自动切换服务端 mode，以兼容尚未提供该模式的旧版本并保留完整的操作详情。两种机制的权限边界不同。[Google 官方 CLI 的 auto 模式](https://antigravity.google/docs/cli/modes/)有自己的可用条件。模型审核依赖提供的数据和模型判断，不能保证识别所有危险行为，也不构成安全沙箱；复杂脚本的真实副作用不能仅凭命令名确定。
 
 `/status` 的审核请求数和已返回 token 只统计本次打开期间的独立审核请求。取消或超时后可能缺少最终用量；这些用量不会合并到 Pi 主对话统计，收费以所选 Pi provider 为准。要完全停止此类模型请求，使用 `/permissions manual`。
 

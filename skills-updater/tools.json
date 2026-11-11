@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "tools": [
+    {
+      "id": "agent-desktop",
+      "enabled": true,
+      "check": ["agent-desktop", "--version"],
+      "update": [
+        "npm",
+        "install",
+        "-g",
+        "--allow-scripts=agent-desktop",
+        "agent-desktop@latest",
+        "--no-audit",
+        "--no-fund"
+      ],
+      "link": {
+        "target": "~/.npm/bin/agent-desktop",
+        "path": "~/.local/bin/agent-desktop"
+      },
+      "timeout": 300
+    },
+    {
+      "id": "markitdown",
+      "enabled": true,
+      "check": ["markitdown", "--version"],
+      "update": ["uv", "tool", "install", "--force", "markitdown[pptx]"],
+      "timeout": 300
+    },
+    {
+      "id": "codegraph",
+      "enabled": true,
+      "check": ["codegraph", "--version"],
+      "update": ["codegraph", "upgrade"],
+      "timeout": 600
+    },
+    {
+      "id": "agy",
+      "enabled": true,
+      "check": ["agy", "--version"],
+      "update": ["agy", "update"],
+      "timeout": 600
+    }
+  ]
+}

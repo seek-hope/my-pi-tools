@@ -20,6 +20,8 @@ def paths(home: Path):
     state = Path(os.environ.get("XDG_STATE_HOME", home / ".local/state"))
     return {
         home / ".local/bin/check-agent-skills": ROOT / "check-agent-skills.py",
+        home / ".local/bin/update-clis": ROOT / "update-clis.py",
+        home / ".local/bin/update-pi-toolchain": ROOT / "update-pi-toolchain.py",
         config / "systemd/user/check-agent-skills.service": ROOT / "systemd/check-agent-skills.service",
         config / "systemd/user/check-agent-skills.timer": ROOT / "systemd/check-agent-skills.timer",
     }, state / "scientific-skills-check"
@@ -49,8 +51,9 @@ def install(home: Path, *, no_systemd=False, dry_run=False) -> Path | None:
             raise FileNotFoundError(source)
         if destination.is_dir() and not destination.is_symlink():
             raise ValueError(f"目标为目录，拒绝覆盖: {destination}")
-    if not os.access(ROOT / "check-agent-skills.py", os.X_OK):
-        raise ValueError("check-agent-skills.py 必须有可执行权限")
+    for script in ("check-agent-skills.py", "update-clis.py", "update-pi-toolchain.py"):
+        if not os.access(ROOT / script, os.X_OK):
+            raise ValueError(f"{script} 必须有可执行权限")
     if dry_run:
         for destination, source in targets.items():
             print(f"{destination} -> {source}")
@@ -127,7 +130,7 @@ def install(home: Path, *, no_systemd=False, dry_run=False) -> Path | None:
         print(f"{destination} -> {source}")
     if backup:
         print(f"原入口备份: {backup}")
-    print("链接已安装；尚未加载 systemd。" if no_systemd else "每日更新定时器已启用；未主动执行技能更新。")
+    print("链接已安装；尚未加载 systemd。" if no_systemd else "每日技能与 CLI 更新定时器已启用；未主动执行更新。")
     return backup
 
 

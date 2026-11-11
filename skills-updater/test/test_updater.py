@@ -317,7 +317,9 @@ class InstallTests(Workspace):
 
     def test_activation_failure_rolls_back_files_and_relative_links(self):
         targets, _ = self.i.paths(self.home)
-        command, service, timer = targets
+        command = next(path for path in targets if path.name == "check-agent-skills")
+        service = next(path for path in targets if path.name == "check-agent-skills.service")
+        timer = next(path for path in targets if path.name == "check-agent-skills.timer")
         command.parent.mkdir(parents=True)
         command.write_text("old script")
         service.parent.mkdir(parents=True)
@@ -372,6 +374,16 @@ class InstallTests(Workspace):
             self.i.install(self.home)
         self.assertIn(('start', 'check-agent-skills.timer'), calls)
         self.assertTrue(all(not p.exists() for p in self.i.paths(self.home)[0]))
+
+    def test_installs_tool_updater_and_wrapper_links(self):
+        targets, _ = self.i.paths(self.home)
+        names = {path.name for path in targets}
+        self.assertTrue({"check-agent-skills", "update-clis", "update-pi-toolchain"}.issubset(names))
+        service = (ROOT / "systemd/check-agent-skills.service").read_text()
+        self.assertIn("ExecStart=/usr/bin/python3 %h/.local/bin/update-pi-toolchain", service)
+        self.assertIn("TimeoutStartSec=1800", service)
+        self.assertIn("%h/.local/share/pi-node/current/bin", service)
+        self.assertIn("pi-toolchain-updates/last-report.txt", service)
 
     def test_systemd_install_does_not_explicitly_start_update_service(self):
         calls = []
