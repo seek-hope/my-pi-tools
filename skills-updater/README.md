@@ -89,6 +89,67 @@ systemctl --user disable --now check-agent-skills.timer
 
 **自动更新意味着持续信任上游内容。** 技能可以携带可执行脚本和指令，更新器不会审计这些内容，也不是沙箱。本地定制会被备份后覆盖；需要长期保留的修改应放在自己管理的来源中。这里迁移的是既有自动更新机制，不把第三方技能内容或其许可证并入本仓库。
 
+## 已追加的技能与工具
+
+本机在本轮追加了以下来源，并登记在个人 `registry.json` 的 `extraGitSkills` 中（不是仓库默认值）：
+
+| 技能 / 工具 | 上游 | 仓库内目录 | 许可 |
+| --- | --- | --- | --- |
+| `pptx` | [anthropics/skills](https://github.com/anthropics/skills) | `skills/pptx` | Apache-2.0 |
+| `ppt-master` | [hugohe3/ppt-master](https://github.com/hugohe3/ppt-master) | `skills/ppt-master` | MIT |
+| `agent-desktop` | [vercel-labs/agent-desktop](https://github.com/vercel-labs/agent-desktop) | `skills/agent-desktop` | Apache-2.0 |
+| `agent-desktop-linux` | 同上 | `skills/agent-desktop-linux` | Apache-2.0 |
+
+登记后先运行 `check-agent-skills --dry-run` 确认待安装项，再运行 `check-agent-skills`。这四个技能会像其他 Git 来源一样按上游 `main` 更新；`ppt-master` 约 13,000 个文件、80 MB，首次安装或首次更新可能较慢。
+
+**依赖说明**：本机的 `~/.local/bin/python3` 指向一个项目虚拟环境，不应把通用 PPT 依赖装进去。以下命令使用 `uv` 的临时环境，不修改该环境：
+
+```bash
+# Anthropic pptx：创建、缩略图、校验（已验证）
+uv run --no-project --with python-pptx --with defusedxml --with lxml --with pillow \
+  python "$HOME/.agents/skills/pptx/scripts/thumbnail.py" deck.pptx thumbs
+
+# pptxgenjs 已全局安装；Node 脚本需要显式指定全局模块路径
+NODE_PATH="$(npm root -g)" node make-deck.cjs
+
+# PPT Master：完整性门禁（仅标准库）
+python3 "$HOME/.agents/skills/ppt-master/scripts/attribution_guard.py"
+
+# PPT Master：已用这组核心依赖验证 SVG → 原生 PPTX
+uv run --no-project --with python-pptx --with XlsxWriter --with skia-pathops \
+  --with uharfbuzz --with PyYAML --with pillow --with numpy \
+  python "$HOME/.agents/skills/ppt-master/scripts/svg_quality_checker.py" . \
+  --quick-generate --canonical-authoring --stage final --json
+uv run --no-project --with python-pptx --with XlsxWriter --with skia-pathops \
+  --with uharfbuzz --with PyYAML --with pillow --with numpy \
+  python "$HOME/.agents/skills/ppt-master/scripts/svg_to_pptx.py" . -o out.pptx \
+  --quick-generate --primary-language en
+
+# 需要 OCR、PDF、音频、网页源等完整能力时（包含可选和 AGPL 组件，先阅读 requirements.txt）
+uv run --no-project --with-requirements "$HOME/.agents/skills/ppt-master/requirements.txt" \
+  python "$HOME/.agents/skills/ppt-master/scripts/svg_quality_checker.py" . \
+  --quick-generate --canonical-authoring --stage final --json
+uv run --no-project --with-requirements "$HOME/.agents/skills/ppt-master/requirements.txt" \
+  python "$HOME/.agents/skills/ppt-master/scripts/svg_to_pptx.py" . -o out.pptx \
+  --quick-generate --primary-language en
+```
+
+Anthropic 技能还建议用 `markitdown` 读取内容和做 QA；本机已安装带 PPTX 支持的版本：
+
+```bash
+uv tool install --force 'markitdown[pptx]'
+markitdown deck.pptx
+```
+
+`agent-desktop` 的 CLI 不在技能目录里，由 npm 单独管理。本机已将它链接到 `~/.local/bin/agent-desktop`，并确认 `agent-desktop status` 能读取当前 Wayland 会话的 AT-SPI 权限。CLI 更新不经过技能定时器，需要手动执行：
+
+```bash
+npm install -g --allow-scripts=agent-desktop agent-desktop@latest
+agent-desktop status
+```
+
+`--allow-scripts` 用于安装可选的本地原生二进制包装；不要全局打开 npm 脚本执行。`agent-desktop` 的技能文本来自 Git 上游，CLI 版本与技能文本可能短暂不一致；遇到命令差异时先升级 CLI，再用 `agent-desktop skills get platform` 读取与当前二进制匹配的平台指南。
+
 ## 本地文件与恢复
 
 默认路径如下；缓存、状态、unit 路径分别遵循相应 XDG 环境变量。
