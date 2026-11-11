@@ -10,8 +10,6 @@
 | [Search](search/README.md) | `pi-deepseek-web` | DeepSeek + Exa 网页搜索与抓取，合并结果并处理单源失败 | 至少一个 provider 的 API Key |
 | [Helper](helper/README.zh-CN.md) | `my-pi-helper` | 临时只读 Pi 会话，使用原生上下文管理并保留主会话权限 hook | 宿主工具与已配置模型 |
 
-> **已废弃：** `gemini-login` / Antigravity ACP 已从本仓库移除。Gemini Pro 请直接使用官方 Antigravity IDE/CLI；旧版本可从 Git 历史恢复。
-
 ## 环境与安装
 
 要求 Node.js **≥ 22.19**。Helper 支持 Pi **≥ 1.5.0** 稳定版；CodeGraph 的 peer 范围为 `>=1.3.0`，Search 为 `*`，具体测试范围见各包文档。CodeGraph CLI 使用 **1.6.2**。CI 覆盖 Linux，其他平台暂无测试覆盖。
