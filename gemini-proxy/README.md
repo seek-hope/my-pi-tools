@@ -74,6 +74,23 @@ python3 gemini-proxy/install.py
 
 `update-cliproxyapi` 在 macOS 上同样下载 `darwin_aarch64`/`darwin_amd64` 包、校验 SHA-256，并用 `launchctl kickstart -k` 重启。macOS 配置中的 `requests.proxy-url` 应留空，除非本机另有出站代理。
 
+安装器还会创建每日更新 LaunchAgent：
+
+```text
+Label: com.my-pi-tools.cliproxyapi-update
+时间: 每天 09:00 本地时间，脚本内随机延迟 0–10 分钟
+日志: ~/Library/Logs/cliproxyapi-update.log / .err.log
+```
+
+检查或手动触发：
+
+```bash
+launchctl print gui/$(id -u)/com.my-pi-tools.cliproxyapi-update
+launchctl kickstart -k gui/$(id -u)/com.my-pi-tools.cliproxyapi-update
+```
+
+不需要定时器时使用 `python3 gemini-proxy/install.py --no-timer`。
+
 ## 运维命令
 
 ```bash

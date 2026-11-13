@@ -1,0 +1,6 @@
+#!/bin/bash
+# Daily CLIProxyAPI update. The launchd job starts at 09:00 local time;
+# sleep 0–600 seconds to match the Linux timer's jitter.
+set -u
+sleep $((RANDOM % 601))
+exec "$(dirname "$0")/update-cliproxyapi"

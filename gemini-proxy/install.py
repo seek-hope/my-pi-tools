@@ -24,11 +24,15 @@ LAUNCHD_DIR = HOME / "Library/LaunchAgents"
 LAUNCHD_LABEL = "com.my-pi-tools.cliproxyapi"
 LAUNCHD_PLIST = LAUNCHD_DIR / f"{LAUNCHD_LABEL}.plist"
 LAUNCHD_TEMPLATE = ROOT / "launchd/com.my-pi-tools.cliproxyapi.plist"
+LAUNCHD_UPDATE_LABEL = "com.my-pi-tools.cliproxyapi-update"
+LAUNCHD_UPDATE_PLIST = LAUNCHD_DIR / f"{LAUNCHD_UPDATE_LABEL}.plist"
+LAUNCHD_UPDATE_TEMPLATE = ROOT / "launchd/com.my-pi-tools.cliproxyapi-update.plist"
 
 LINKS = {
     "cliproxy-pi-sync": ROOT / "bin/cliproxy-pi-sync",
     "cliproxy-antigravity-login": ROOT / "bin/cliproxy-antigravity-login",
     "update-cliproxyapi": ROOT / "update.py",
+    "update-cliproxyapi-scheduled": ROOT / "bin/update-cliproxyapi-scheduled",
 }
 
 
@@ -58,41 +62,52 @@ def link(source: Path, target: Path, dry_run: bool, stamp: str) -> None:
         target.symlink_to(source)
 
 
-def install_launchd(dry_run: bool, stamp: str) -> int:
+def install_launchd(dry_run: bool, stamp: str, no_timer: bool) -> int:
     if not shutil.which("launchctl"):
-        print("warning: launchctl is unavailable; plist was not installed", file=sys.stderr)
+        print("warning: launchctl is unavailable; launchd agents were not installed", file=sys.stderr)
         return 1
     LAUNCHD_DIR.mkdir(parents=True, exist_ok=True)
-    if LAUNCHD_PLIST.exists() or LAUNCHD_PLIST.is_symlink():
-        backup = LAUNCHD_PLIST.with_name(f"{LAUNCHD_PLIST.name}.bak-{stamp}")
-        print(f"backup  {LAUNCHD_PLIST} -> {backup}")
-        if not dry_run:
-            LAUNCHD_PLIST.rename(backup)
-    else:
-        print(f"write   {LAUNCHD_PLIST}")
+    agents = [(LAUNCHD_PLIST, LAUNCHD_TEMPLATE)]
+    if not no_timer:
+        agents.append((LAUNCHD_UPDATE_PLIST, LAUNCHD_UPDATE_TEMPLATE))
+    for plist, template in agents:
+        if plist.exists() or plist.is_symlink():
+            backup = plist.with_name(f"{plist.name}.bak-{stamp}")
+            print(f"backup  {plist} -> {backup}")
+            if not dry_run:
+                plist.rename(backup)
+        else:
+            print(f"write   {plist}")
+        if dry_run:
+            continue
+        text = template.read_text().replace("__HOME__", str(HOME))
+        plist.write_text(text)
+        os.chmod(plist, 0o644)
     if dry_run:
         print("service skipped in dry-run")
         return 0
-    text = LAUNCHD_TEMPLATE.read_text().replace("__HOME__", str(HOME))
-    LAUNCHD_PLIST.write_text(text)
-    os.chmod(LAUNCHD_PLIST, 0o644)
     uid = os.getuid()
-    run(["launchctl", "bootout", f"gui/{uid}/{LAUNCHD_LABEL}"])  # idempotent
-    if not run(["launchctl", "bootstrap", f"gui/{uid}", str(LAUNCHD_PLIST)]):
-        print("warning: launchctl bootstrap failed; inspect the plist and log", file=sys.stderr)
-        return 1
-    run(["launchctl", "enable", f"gui/{uid}/{LAUNCHD_LABEL}"])
+    for plist, _template in agents:
+        label = plist.stem
+        run(["launchctl", "bootout", f"gui/{uid}/{label}"])  # idempotent
+        if not run(["launchctl", "bootstrap", f"gui/{uid}", str(plist)]):
+            print(f"warning: launchctl bootstrap failed for {label}", file=sys.stderr)
+            return 1
+        run(["launchctl", "enable", f"gui/{uid}/{label}"])
     if not run(["launchctl", "kickstart", "-k", f"gui/{uid}/{LAUNCHD_LABEL}"]):
         print("warning: launchctl kickstart failed", file=sys.stderr)
         return 1
     print(f"service {LAUNCHD_LABEL} bootstrapped and running")
+    if not no_timer:
+        print(f"timer {LAUNCHD_UPDATE_LABEL} loaded (daily 09:00 + 0-10 min)")
     return 0
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dry-run", action="store_true", help="show changes only")
-    parser.add_argument("--no-service", action="store_true", help="do not reload/enable systemd")
+    parser.add_argument("--no-service", action="store_true", help="do not reload/enable the service")
+    parser.add_argument("--no-timer", action="store_true", help="do not install the daily macOS updater")
     args = parser.parse_args()
     stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 
@@ -127,7 +142,7 @@ def main() -> int:
         print("service skipped")
         return 0
     if sys.platform == "darwin":
-        return install_launchd(args.dry_run, stamp)
+        return install_launchd(args.dry_run, stamp, args.no_timer)
     if args.dry_run:
         print("service skipped in dry-run")
         return 0
