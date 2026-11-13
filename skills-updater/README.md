@@ -32,7 +32,7 @@ tail -f ~/Library/Logs/pi-toolchain-update.log
 
 ## 安装与迁移
 
-需要 Linux 或 macOS、Python ≥ 3.10、Git；Linux 使用用户级 systemd，macOS 使用 launchd。更新 `uv-tool` 来源还需要 `uv` 和已经安装的对应工具；CLI 更新还需要 `npm`、`uv`、已安装的 `codegraph`，以及通过 `gemini-proxy/install.py` 安装的 `update-cliproxyapi`。桌面通知可选依赖 `notify-send`。本机默认包来源为 `browser-use`。
+需要 Linux 或 macOS、Python ≥ 3.9、Git；Linux 使用用户级 systemd，macOS 使用 launchd。更新 `uv-tool` 来源还需要 `uv` 和已经安装的对应工具；CLI 更新还需要 `npm`、`uv`、已安装的 `codegraph`，以及通过 `gemini-proxy/install.py` 安装的 `update-cliproxyapi`。桌面通知可选依赖 `notify-send`。本机默认包来源为 `browser-use`。
 
 在仓库根目录运行：
 

@@ -232,7 +232,7 @@ def main() -> int:
             raise
         print(f"installed {version} -> {target}")
         if not args.no_restart:
-            print(f"restarted {SERVICE}")
+            print(f"restarted {LAUNCHD_LABEL if sys.platform == 'darwin' else SERVICE}")
     return 0
 
 
