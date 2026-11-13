@@ -1,6 +1,6 @@
 # Skills 与 CLI 自动更新
 
-集中管理本机 `~/.agents/skills/` 的自动更新，以及 `agent-desktop`、`markitdown`、`codegraph`、`cliproxyapi` 四个 CLI 的更新命令和用户级 systemd 定时器。这是独立的主机维护工具，不是 Pi 扩展；不需要 `pi install`，也不调用模型。
+集中管理本机 `~/.agents/skills/` 的自动更新，以及 `agent-desktop`、`markitdown`、`codegraph`、`cliproxyapi` 四个 CLI 的更新命令和用户级定时器（Linux systemd、macOS launchd）。这是独立的主机维护工具，不是 Pi 扩展；不需要 `pi install`，也不调用模型。
 
 仓库保存技能更新程序、CLI 清单、service/timer、安装器和离线测试。技能内容、个人安装清单、登记信息、缓存、更新报告及备份留在用户目录，不进入 Git。
 
@@ -28,11 +28,11 @@ launchctl kickstart -k gui/$(id -u)/com.my-pi-tools.update-pi-toolchain
 tail -f ~/Library/Logs/pi-toolchain-update.log
 ```
 
-只需链接、不安装定时器时加 `--no-timer`。技能目录和 `registry.json` 属于用户数据，不在仓库中；从已有机器迁移时需单独复制 `~/.agents/` 与 `~/.local/state/scientific-skills-check/registry.json`。
+只需链接、不安装定时器时加 `--no-timer`。全工具链定时器已包含 `cliproxyapi`，安装时会移除重复的单独代理定时器。技能目录和 `registry.json` 属于用户数据，不在仓库中；从已有机器迁移时需单独复制 `~/.agents/` 与 `~/.local/state/scientific-skills-check/registry.json`。
 
 ## 安装与迁移
 
-需要 Linux、Python ≥ 3.10、Git 和用户级 systemd。更新 `uv-tool` 来源还需要 `uv` 和已经安装的对应工具；CLI 更新还需要 `npm`、`uv`、已安装的 `codegraph`，以及通过 `gemini-proxy/install.py` 安装的 `update-cliproxyapi`。桌面通知可选依赖 `notify-send`。本机默认包来源为 `browser-use`。
+需要 Linux 或 macOS、Python ≥ 3.10、Git；Linux 使用用户级 systemd，macOS 使用 launchd。更新 `uv-tool` 来源还需要 `uv` 和已经安装的对应工具；CLI 更新还需要 `npm`、`uv`、已安装的 `codegraph`，以及通过 `gemini-proxy/install.py` 安装的 `update-cliproxyapi`。桌面通知可选依赖 `notify-send`。本机默认包来源为 `browser-use`。
 
 在仓库根目录运行：
 

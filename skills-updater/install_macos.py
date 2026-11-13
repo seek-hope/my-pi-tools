@@ -20,6 +20,8 @@ LAUNCHD = HOME / "Library/LaunchAgents"
 LABEL = "com.my-pi-tools.update-pi-toolchain"
 PLIST = LAUNCHD / f"{LABEL}.plist"
 TEMPLATE = ROOT / "launchd/com.my-pi-tools.update-pi-toolchain.plist"
+PROXY_UPDATE_LABEL = "com.my-pi-tools.cliproxyapi-update"
+PROXY_UPDATE_PLIST = LAUNCHD / f"{PROXY_UPDATE_LABEL}.plist"
 LINKS = {
     "check-agent-skills": ROOT / "check-agent-skills.py",
     "update-clis": ROOT / "update-clis.py",
@@ -49,6 +51,17 @@ def link(source: Path, target: Path, dry_run: bool, stamp: str) -> None:
     if not dry_run:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.symlink_to(source)
+
+
+def remove_duplicate_proxy_timer(dry_run: bool, stamp: str) -> None:
+    if not (PROXY_UPDATE_PLIST.exists() or PROXY_UPDATE_PLIST.is_symlink()):
+        return
+    print(f"remove  {PROXY_UPDATE_PLIST} (the full timer already updates cliproxyapi)")
+    if dry_run:
+        return
+    run(["launchctl", "bootout", f"gui/{os.getuid()}/{PROXY_UPDATE_LABEL}"])
+    backup = PROXY_UPDATE_PLIST.with_name(f"{PROXY_UPDATE_PLIST.name}.bak-{stamp}")
+    PROXY_UPDATE_PLIST.rename(backup)
 
 
 def install_timer(dry_run: bool, stamp: str) -> int:
@@ -114,6 +127,7 @@ def main() -> int:
     if args.no_timer:
         print("timer skipped")
         return 0
+    remove_duplicate_proxy_timer(args.dry_run, stamp)
     return install_timer(args.dry_run, stamp)
 
 
