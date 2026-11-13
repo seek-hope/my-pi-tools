@@ -12,6 +12,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -71,6 +72,7 @@ def install_launchd(dry_run: bool, stamp: str, no_timer: bool) -> int:
     if not no_timer:
         agents.append((LAUNCHD_UPDATE_PLIST, LAUNCHD_UPDATE_TEMPLATE))
     for plist, template in agents:
+        backup = None
         if plist.exists() or plist.is_symlink():
             backup = plist.with_name(f"{plist.name}.bak-{stamp}")
             print(f"backup  {plist} -> {backup}")
@@ -83,17 +85,36 @@ def install_launchd(dry_run: bool, stamp: str, no_timer: bool) -> int:
         text = template.read_text().replace("__HOME__", str(HOME))
         plist.write_text(text)
         os.chmod(plist, 0o644)
+        label = plist.stem
+        if not run(["plutil", "-lint", str(plist)]):
+            print(f"warning: invalid plist: {plist}", file=sys.stderr)
+            if backup:
+                plist.unlink(missing_ok=True)
+                backup.rename(plist)
+            return 1
+        uid = os.getuid()
+        run(["launchctl", "bootout", f"gui/{uid}/{label}"])
+        time.sleep(1)
+        loaded = False
+        for _ in range(3):
+            if run(["launchctl", "bootstrap", f"gui/{uid}", str(plist)]):
+                loaded = True
+                break
+            time.sleep(1.5)
+        if not loaded:
+            print(f"warning: launchctl bootstrap failed for {label}; restoring previous agent", file=sys.stderr)
+            plist.unlink(missing_ok=True)
+            if backup:
+                backup.rename(plist)
+                run(["launchctl", "bootout", f"gui/{uid}/{label}"])
+                time.sleep(1)
+                run(["launchctl", "bootstrap", f"gui/{uid}", str(plist)])
+            return 1
+        run(["launchctl", "enable", f"gui/{uid}/{label}"])
     if dry_run:
         print("service skipped in dry-run")
         return 0
     uid = os.getuid()
-    for plist, _template in agents:
-        label = plist.stem
-        run(["launchctl", "bootout", f"gui/{uid}/{label}"])  # idempotent
-        if not run(["launchctl", "bootstrap", f"gui/{uid}", str(plist)]):
-            print(f"warning: launchctl bootstrap failed for {label}", file=sys.stderr)
-            return 1
-        run(["launchctl", "enable", f"gui/{uid}/{label}"])
     if not run(["launchctl", "kickstart", "-k", f"gui/{uid}/{LAUNCHD_LABEL}"]):
         print("warning: launchctl kickstart failed", file=sys.stderr)
         return 1
