@@ -66,7 +66,7 @@ export EXA_API_KEY=...
 
 ## 技能与 CLI 自动更新
 
-本机的技能更新，以及 `agent-desktop`、`markitdown`、`codegraph`、`cliproxyapi` 四个 CLI 的更新，统一由 [skills-updater/](skills-updater/README.md) 管理。systemd timer 保持每天 09:00 后随机延迟 0–10 分钟运行；它是独立主机工具，不是 Pi 扩展。实际技能、来源记录、CLI 状态和备份仍保存在用户目录。
+本机的技能更新，以及 `agent-desktop`、`markitdown`、`codegraph`、`cliproxyapi` 四个 CLI 的更新，统一由 [skills-updater/](skills-updater/README.md) 管理。Linux 使用 systemd、macOS 使用 launchd，均保持每天 09:00 后随机延迟 0–10 分钟运行；它是独立主机工具，不是 Pi 扩展。实际技能、来源记录、CLI 状态和备份仍保存在用户目录。
 
 ```bash
 python3 skills-updater/install.py --dry-run  # 预览安装/迁移

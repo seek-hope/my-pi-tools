@@ -1,0 +1,6 @@
+#!/bin/bash
+# Daily Pi skills + CLI toolchain update. launchd starts this at 09:00;
+# sleep 0–600 seconds to match the Linux systemd timer's jitter.
+set -u
+sleep $((RANDOM % 601))
+exec "$(dirname "$0")/update-pi-toolchain"
