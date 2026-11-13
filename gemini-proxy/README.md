@@ -89,7 +89,7 @@ launchctl print gui/$(id -u)/com.my-pi-tools.cliproxyapi-update
 launchctl kickstart -k gui/$(id -u)/com.my-pi-tools.cliproxyapi-update
 ```
 
-不需要定时器时使用 `python3 gemini-proxy/install.py --no-timer`。
+不需要定时器时使用 `python3 gemini-proxy/install.py --no-timer`。如果已启用 `skills-updater/install_macos.py` 的全工具链定时器，代理安装器会自动跳过单独的代理定时器；全工具链的 `tools.json` 已包含 `cliproxyapi`。
 
 ## 运维命令
 

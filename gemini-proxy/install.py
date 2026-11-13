@@ -132,6 +132,12 @@ def main() -> int:
     args = parser.parse_args()
     stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 
+    # The full skills/toolchain timer already updates cliproxyapi daily.
+    if (sys.platform == "darwin" and not args.no_timer and
+            (HOME / "Library/LaunchAgents/com.my-pi-tools.update-pi-toolchain.plist").exists()):
+        print("full toolchain timer present; skipping the separate proxy timer")
+        args.no_timer = True
+
     BIN.mkdir(parents=True, exist_ok=True)
     CONFIG.mkdir(parents=True, exist_ok=True)
     if sys.platform != "darwin":
