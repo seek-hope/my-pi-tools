@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.my-pi-tools.cliproxyapi</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__HOME__/.local/bin/cliproxyapi</string>
+    <string>--config</string>
+    <string>__HOME__/.config/cliproxyapi/config.yaml</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>__HOME__/.config/cliproxyapi</string>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>5</integer>
+  <key>ProcessType</key>
+  <string>Background</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>NO_PROXY</key>
+    <string>127.0.0.1,localhost,::1</string>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>__HOME__/Library/Logs/cliproxyapi.log</string>
+  <key>StandardErrorPath</key>
+  <string>__HOME__/Library/Logs/cliproxyapi.err.log</string>
+</dict>
+</plist>

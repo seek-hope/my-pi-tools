@@ -34,6 +34,8 @@ OPT = HOME / ".local/opt/cliproxyapi"
 CURRENT = OPT / "current"
 BIN_LINK = HOME / ".local/bin/cliproxyapi"
 SERVICE = "cliproxyapi.service"
+LAUNCHD_LABEL = "com.my-pi-tools.cliproxyapi"
+LAUNCHD_PLIST = HOME / "Library/LaunchAgents" / f"{LAUNCHD_LABEL}.plist"
 
 
 def run(args: list[str]) -> subprocess.CompletedProcess[str]:
@@ -136,6 +138,18 @@ def replace_symlink(link: Path, target: Path) -> None:
 
 
 def restart_service() -> None:
+    if sys.platform == "darwin":
+        if not shutil.which("launchctl"):
+            raise SystemExit("launchctl is unavailable")
+        uid = os.getuid()
+        target = f"gui/{uid}/{LAUNCHD_LABEL}"
+        if run(["launchctl", "kickstart", "-k", target]).returncode != 0:
+            # Bootstrap once if the agent was not installed yet.
+            run(["launchctl", "bootstrap", f"gui/{uid}", str(LAUNCHD_PLIST)])
+            result = run(["launchctl", "kickstart", "-k", target])
+            if result.returncode != 0:
+                raise SystemExit((result.stderr or result.stdout or "launchd restart failed").strip())
+        return
     if not shutil.which("systemctl"):
         print("warning: systemctl not found; service was not restarted", file=sys.stderr)
         return
@@ -211,7 +225,10 @@ def main() -> int:
             if old_bin:
                 replace_symlink(BIN_LINK, Path(old_bin))
             if not args.no_restart:
-                run(["systemctl", "--user", "restart", SERVICE])
+                try:
+                    restart_service()
+                except BaseException:
+                    pass
             raise
         print(f"installed {version} -> {target}")
         if not args.no_restart:

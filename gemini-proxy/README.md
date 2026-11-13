@@ -56,6 +56,24 @@ update-cliproxyapi
 
 更新器从 GitHub Releases 下载当前平台的压缩包，校验 `checksums.txt`，安装到新的版本目录，原子切换 `current` 与 `~/.local/bin/cliproxyapi`，再重启用户服务。失败会恢复旧链接。每日 CLI 更新器也通过 `tools.json` 调用它。
 
+## macOS（launchd）
+
+同一套 `install.py` 会自动识别 macOS，不再使用 systemd：
+
+```bash
+python3 gemini-proxy/install.py --dry-run
+python3 gemini-proxy/install.py
+```
+
+它会写入 `~/Library/LaunchAgents/com.my-pi-tools.cliproxyapi.plist`，并通过 `launchctl bootstrap gui/$(id -u)` 启动。日志在：
+
+```text
+~/Library/Logs/cliproxyapi.log
+~/Library/Logs/cliproxyapi.err.log
+```
+
+`update-cliproxyapi` 在 macOS 上同样下载 `darwin_aarch64`/`darwin_amd64` 包、校验 SHA-256，并用 `launchctl kickstart -k` 重启。macOS 配置中的 `requests.proxy-url` 应留空，除非本机另有出站代理。
+
 ## 运维命令
 
 ```bash

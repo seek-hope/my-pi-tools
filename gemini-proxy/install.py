@@ -20,6 +20,10 @@ BIN = HOME / ".local/bin"
 CONFIG = HOME / ".config/cliproxyapi"
 UNIT_DIR = HOME / ".config/systemd/user"
 UNIT = UNIT_DIR / "cliproxyapi.service"
+LAUNCHD_DIR = HOME / "Library/LaunchAgents"
+LAUNCHD_LABEL = "com.my-pi-tools.cliproxyapi"
+LAUNCHD_PLIST = LAUNCHD_DIR / f"{LAUNCHD_LABEL}.plist"
+LAUNCHD_TEMPLATE = ROOT / "launchd/com.my-pi-tools.cliproxyapi.plist"
 
 LINKS = {
     "cliproxy-pi-sync": ROOT / "bin/cliproxy-pi-sync",
@@ -54,6 +58,37 @@ def link(source: Path, target: Path, dry_run: bool, stamp: str) -> None:
         target.symlink_to(source)
 
 
+def install_launchd(dry_run: bool, stamp: str) -> int:
+    if not shutil.which("launchctl"):
+        print("warning: launchctl is unavailable; plist was not installed", file=sys.stderr)
+        return 1
+    LAUNCHD_DIR.mkdir(parents=True, exist_ok=True)
+    if LAUNCHD_PLIST.exists() or LAUNCHD_PLIST.is_symlink():
+        backup = LAUNCHD_PLIST.with_name(f"{LAUNCHD_PLIST.name}.bak-{stamp}")
+        print(f"backup  {LAUNCHD_PLIST} -> {backup}")
+        if not dry_run:
+            LAUNCHD_PLIST.rename(backup)
+    else:
+        print(f"write   {LAUNCHD_PLIST}")
+    if dry_run:
+        print("service skipped in dry-run")
+        return 0
+    text = LAUNCHD_TEMPLATE.read_text().replace("__HOME__", str(HOME))
+    LAUNCHD_PLIST.write_text(text)
+    os.chmod(LAUNCHD_PLIST, 0o644)
+    uid = os.getuid()
+    run(["launchctl", "bootout", f"gui/{uid}/{LAUNCHD_LABEL}"])  # idempotent
+    if not run(["launchctl", "bootstrap", f"gui/{uid}", str(LAUNCHD_PLIST)]):
+        print("warning: launchctl bootstrap failed; inspect the plist and log", file=sys.stderr)
+        return 1
+    run(["launchctl", "enable", f"gui/{uid}/{LAUNCHD_LABEL}"])
+    if not run(["launchctl", "kickstart", "-k", f"gui/{uid}/{LAUNCHD_LABEL}"]):
+        print("warning: launchctl kickstart failed", file=sys.stderr)
+        return 1
+    print(f"service {LAUNCHD_LABEL} bootstrapped and running")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dry-run", action="store_true", help="show changes only")
@@ -63,7 +98,8 @@ def main() -> int:
 
     BIN.mkdir(parents=True, exist_ok=True)
     CONFIG.mkdir(parents=True, exist_ok=True)
-    UNIT_DIR.mkdir(parents=True, exist_ok=True)
+    if sys.platform != "darwin":
+        UNIT_DIR.mkdir(parents=True, exist_ok=True)
     os.chmod(CONFIG, 0o700)
 
     config = CONFIG / "config.yaml"
@@ -76,7 +112,8 @@ def main() -> int:
     else:
         print(f"keep    {config}")
 
-    link(ROOT / "systemd/cliproxyapi.service", UNIT, args.dry_run, stamp)
+    if sys.platform != "darwin":
+        link(ROOT / "systemd/cliproxyapi.service", UNIT, args.dry_run, stamp)
     for name, source in LINKS.items():
         link(source, BIN / name, args.dry_run, stamp)
 
@@ -89,6 +126,8 @@ def main() -> int:
     if args.no_service:
         print("service skipped")
         return 0
+    if sys.platform == "darwin":
+        return install_launchd(args.dry_run, stamp)
     if args.dry_run:
         print("service skipped in dry-run")
         return 0
