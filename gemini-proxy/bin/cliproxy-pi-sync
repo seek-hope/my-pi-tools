@@ -1,0 +1,195 @@
+#!/usr/bin/env python3
+"""cliproxy-pi-sync — 把 CLIProxyAPI 的模型写入 pi 的 models.json。
+
+- 只保留 Claude 系列与 Gemini 3.8 及以上
+- 上下文/最大输出取自 CPA 管理 API 的上游权威元数据（context_length / max_completion_tokens）
+- 开启 reasoning_effort 透传，并把 pi 的思考级别映射为 low/medium/high
+
+用法:
+    cliproxy-pi-sync            # 同步
+    cliproxy-pi-sync --all      # 不顺带过滤，导出上游全部 chat 模型
+    cliproxy-pi-sync --verify   # 同步后发一条真实请求验证链路
+"""
+import json
+import re
+import sys
+import urllib.request
+from pathlib import Path
+
+CFG = Path.home() / ".config/cliproxyapi"
+KEYS = CFG / ".keys"
+MODELS = Path.home() / ".pi/agent/models.json"
+PROVIDER = "cliproxy"
+PROVIDER_NAME = "Gemini Pro (CLIProxyAPI)"
+MIN_GEMINI = 3.8            # 只保留 gemini >= 3.8
+MAX_OUTPUT_CAP = 128000     # pi 侧最大输出上限，避免把上游 1M 输出额度直接暴露
+
+THINKING_MAP = {
+    "off": "low",       # 上游没有真正"关思考"，取最低档
+    "minimal": "low",
+    "low": "low",
+    "medium": "medium",
+    "high": "high",
+    "xhigh": None,
+    "max": None,
+}
+
+
+def keys() -> dict:
+    return dict(
+        line.split("=", 1) for line in KEYS.read_text().splitlines() if "=" in line
+    )
+
+
+def base_url() -> str:
+    port = 8317
+    for line in (CFG / "config.yaml").read_text().splitlines():
+        m = re.match(r"\s*port:\s*(\d+)", line)
+        if m:
+            port = int(m.group(1))
+    return "http://127.0.0.1:%d" % port
+
+
+def get(path: str, key: str):
+    req = urllib.request.Request(base_url() + path, headers={"Authorization": "Bearer " + key})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        return json.loads(r.read().decode())
+
+
+def upstream_defs() -> dict:
+    """上游权威元数据（需要管理密钥）。失败则返回空 dict，走兜底值。"""
+    try:
+        data = get("/v8/management/routing/model-definitions/antigravity", keys()["MGMT"])
+        return {m["id"]: m for m in data.get("models", [])}
+    except Exception:
+        return {}
+
+
+def gemini_version(model_id: str):
+    m = re.search(r"gemini-(\d+(?:\.\d+)?)", model_id)
+    return float(m.group(1)) if m else None
+
+
+def keep(model_id: str) -> bool:
+    if model_id.startswith("claude"):
+        return True
+    v = gemini_version(model_id)
+    return v is not None and v >= MIN_GEMINI
+
+
+def thinking_map(meta: dict) -> dict:
+    """上游声明了 xhigh 才放开 xhigh，其余档位沿用统一映射。"""
+    levels = (meta.get("thinking") or {}).get("levels") or []
+    m = dict(THINKING_MAP)
+    if "xhigh" in levels:
+        m["xhigh"] = "xhigh"
+    return m
+
+
+def entry(model_id: str, meta: dict) -> dict:
+    ctx = meta.get("context_length") or 1048576
+    out = meta.get("max_completion_tokens") or 65536
+    mods = meta.get("supportedInputModalities") or ["text"]
+    inputs = [m for m in ("text", "image") if m in mods]
+    return {
+        "id": model_id,
+        "name": meta.get("display_name") or model_id,
+        "reasoning": True,
+        "thinkingLevelMap": thinking_map(meta),
+        "input": inputs,
+        "contextWindow": ctx,
+        "maxTokens": min(out, MAX_OUTPUT_CAP),
+        "compat": {"supportsReasoningEffort": True, "supportsUsageInStreaming": True},
+    }
+
+
+def ensure_provider(text: str) -> str:
+    # Create the Pi provider when models.json has no cliproxy block yet.
+    if re.search(r'"%s"\s*:\s*\{' % re.escape(PROVIDER), text):
+        return text
+    marker = re.search(r'"providers"\s*:\s*\{', text)
+    if not marker:
+        raise SystemExit("models.json 缺少 providers 对象")
+    block = (
+        '\n    "' + PROVIDER + '": {\n'
+        '      "name": ' + json.dumps(PROVIDER_NAME, ensure_ascii=False) + ',\n'
+        '      "baseUrl": ' + json.dumps(base_url() + "/v1") + ',\n'
+        '      "api": "openai-completions",\n'
+        '      "apiKey": ' + json.dumps(keys()["APIKEY"]) + ',\n'
+        '      "models": []\n'
+        '    },'
+    )
+    return text[:marker.end()] + block + text[marker.end():]
+
+
+def replace_models_array(text: str, entries: list) -> str:
+    """仅在 cliproxy provider 块内替换 models 数组，保留文件里其它注释与格式。"""
+    start = text.index('"%s": {' % PROVIDER)
+    m = re.compile(r'"models"\s*:\s*\[').search(text, start)
+    if not m:
+        raise SystemExit("cliproxy 块内找不到 models 数组")
+    i, depth, in_str, esc = m.end() - 1, 0, False, False
+    while i < len(text):
+        c = text[i]
+        if in_str:
+            if esc:
+                esc = False
+            elif c == "\\":
+                esc = True
+            elif c == '"':
+                in_str = False
+        elif c == '"':
+            in_str = True
+        elif c in "[{":
+            depth += 1
+        elif c in "]}":
+            depth -= 1
+            if depth == 0:
+                break
+        i += 1
+    body = json.dumps(entries, indent=2, ensure_ascii=False)
+    body = "\n" + "\n".join("        " + l for l in body.splitlines()[1:-1]) + "\n      " if entries else ""
+    return text[: m.end() - 1] + "[" + body + "]" + text[i + 1 :]
+
+
+def verify(model_id: str, effort: str = "medium") -> None:
+    payload = json.dumps({
+        "model": model_id,
+        "messages": [{"role": "user", "content": "Reply with exactly: ok"}],
+        "max_tokens": 24,
+        "reasoning_effort": effort,
+    }).encode()
+    req = urllib.request.Request(
+        base_url() + "/v1/chat/completions",
+        data=payload,
+        headers={"Authorization": "Bearer " + keys()["APIKEY"], "Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=120) as r:
+        d = json.loads(r.read().decode())
+    print("验证通过 (%s, effort=%s): %r" % (model_id, effort, d["choices"][0]["message"]["content"][:60]))
+
+
+def main() -> None:
+    cats = get("/v1/models", keys()["APIKEY"]).get("data", [])
+    if not cats:
+        raise SystemExit("代理没有可用模型：先运行 cliproxy-antigravity-login 授权")
+    defs = upstream_defs()
+    ids = [m["id"] for m in cats]
+    ids = ids if "--all" in sys.argv else [i for i in ids if keep(i)]
+    entries = [entry(i, defs.get(i, {})) for i in ids]
+    dropped = [i for i in (m["id"] for m in cats) if i not in ids]
+
+    text = ensure_provider(MODELS.read_text())
+    MODELS.write_text(replace_models_array(text, entries))
+    print("写入 %d 个模型到 %s：\n" % (len(entries), MODELS))
+    print("%-26s %9s %8s  %s" % ("id", "ctx", "maxout", "mods"))
+    for e, i in zip(entries, ids):
+        print("%-26s %9s %8s  %s" % (e["id"], e["contextWindow"], e["maxTokens"], ",".join(e["input"])))
+    if dropped:
+        print("\n已过滤:", ", ".join(dropped))
+    if "--verify" in sys.argv:
+        verify(next((e for e in ids if "gemini-4" in e or "3.8" in e), ids[0]))
+
+
+if __name__ == "__main__":
+    main()

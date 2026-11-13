@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# 重新走一次 Antigravity OAuth 授权。
+# 关键点：stdin 接一个常开的 FIFO，否则登录进程的"粘贴回调 URL"分支不可用，
+# 且会在 5 分钟硬超时后自行退出（表现为浏览器访问 localhost:51121 被拒绝）。
+set -u
+CFG="${XDG_CONFIG_HOME:-$HOME/.config}/cliproxyapi"
+PROXY_URL="${CLIPROXY_EGRESS:-http://127.0.0.1:7897}"
+cd "$CFG" || exit 1
+
+rm -f login.log login.fifo
+mkfifo login.fifo
+setsid nohup sleep 3600 > login.fifo &
+sleep 0.3
+setsid nohup "$HOME/.local/bin/cliproxyapi" \
+  --config "$CFG/config.yaml" \
+  --antigravity-login --no-browser \
+  --login-proxy "$PROXY_URL" \
+  > login.log 2>&1 < login.fifo &
+
+for _ in $(seq 1 20); do
+  url=$(grep -o "https://accounts\.google\.com[^ ]*" login.log 2>/dev/null | tail -1)
+  [ -n "$url" ] && break
+  sleep 0.5
+done
+
+cat <<EOF
+授权链接（5 分钟内完成；浏览器需能访问 accounts.google.com）：
+$url
+
+回调监听：127.0.0.1:51121
+若浏览器报 "localhost refused to connect"，把地址栏里那条失败的 URL 粘回来即可。
+实时日志：tail -f $CFG/login.log
+EOF

@@ -4,7 +4,10 @@
     {
       "id": "agent-desktop",
       "enabled": true,
-      "check": ["agent-desktop", "--version"],
+      "check": [
+        "agent-desktop",
+        "--version"
+      ],
       "update": [
         "npm",
         "install",
@@ -23,22 +26,42 @@
     {
       "id": "markitdown",
       "enabled": true,
-      "check": ["markitdown", "--version"],
-      "update": ["uv", "tool", "install", "--force", "markitdown[pptx]"],
+      "check": [
+        "markitdown",
+        "--version"
+      ],
+      "update": [
+        "uv",
+        "tool",
+        "install",
+        "--force",
+        "markitdown[pptx]"
+      ],
       "timeout": 300
     },
     {
       "id": "codegraph",
       "enabled": true,
-      "check": ["codegraph", "--version"],
-      "update": ["codegraph", "upgrade"],
+      "check": [
+        "codegraph",
+        "--version"
+      ],
+      "update": [
+        "codegraph",
+        "upgrade"
+      ],
       "timeout": 600
     },
     {
-      "id": "agy",
+      "id": "cliproxyapi",
       "enabled": true,
-      "check": ["agy", "--version"],
-      "update": ["agy", "update"],
+      "check": [
+        "update-cliproxyapi",
+        "--check"
+      ],
+      "update": [
+        "update-cliproxyapi"
+      ],
       "timeout": 600
     }
   ]

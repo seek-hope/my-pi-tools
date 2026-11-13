@@ -1,12 +1,12 @@
 # Skills 与 CLI 自动更新
 
-集中管理本机 `~/.agents/skills/` 的自动更新，以及 `agent-desktop`、`markitdown`、`codegraph`、`agy` 四个 CLI 的更新命令和用户级 systemd 定时器。这是独立的主机维护工具，不是 Pi 扩展；不需要 `pi install`，也不调用模型。
+集中管理本机 `~/.agents/skills/` 的自动更新，以及 `agent-desktop`、`markitdown`、`codegraph`、`cliproxyapi` 四个 CLI 的更新命令和用户级 systemd 定时器。这是独立的主机维护工具，不是 Pi 扩展；不需要 `pi install`，也不调用模型。
 
 仓库保存技能更新程序、CLI 清单、service/timer、安装器和离线测试。技能内容、个人安装清单、登记信息、缓存、更新报告及备份留在用户目录，不进入 Git。
 
 ## 安装与迁移
 
-需要 Linux、Python ≥ 3.10、Git 和用户级 systemd。更新 `uv-tool` 来源还需要 `uv` 和已经安装的对应工具；CLI 更新还需要 `npm`、`uv`，以及已安装的 `codegraph` / `agy`。桌面通知可选依赖 `notify-send`。本机默认包来源为 `browser-use`。
+需要 Linux、Python ≥ 3.10、Git 和用户级 systemd。更新 `uv-tool` 来源还需要 `uv` 和已经安装的对应工具；CLI 更新还需要 `npm`、`uv`、已安装的 `codegraph`，以及通过 `gemini-proxy/install.py` 安装的 `update-cliproxyapi`。桌面通知可选依赖 `notify-send`。本机默认包来源为 `browser-use`。
 
 在仓库根目录运行：
 
@@ -53,7 +53,7 @@ journalctl --user -u check-agent-skills.service -n 50 --no-pager
 # 分开执行
 ~/.local/bin/update-pi-toolchain --skills-only
 ~/.local/bin/update-pi-toolchain --tools-only
-~/.local/bin/update-clis --only agy
+~/.local/bin/update-clis --only codegraph
 
 # 立即运行 systemd 服务；暂停自动更新
 systemctl --user start check-agent-skills.service
@@ -106,11 +106,11 @@ CLI 命令、版本检查和超时由 [`tools.json`](tools.json) 声明。每个
 | `agent-desktop` | `npm install -g --allow-scripts=agent-desktop agent-desktop@latest` | 安装后确保 `~/.local/bin/agent-desktop` 指向 npm 的 bin；技能文本仍由 Git 更新器同步 |
 | `markitdown` | `uv tool install --force 'markitdown[pptx]'` | 保留 PPTX 读取所需的 extra |
 | `codegraph` | `codegraph upgrade` | 使用 CodeGraph 自己的版本目录和升级器，不使用 npm 覆盖 |
-| `agy` | `agy update` | 使用官方 Antigravity 更新器；下载可能较慢 |
+| `cliproxyapi` | `update-cliproxyapi` | 从 GitHub Releases 下载、校验 SHA-256、切换版本并重启 `cliproxyapi.service`；由 `gemini-proxy/` 提供 |
 
 运行状态写入 `~/.local/state/pi-toolchain-updates/`：`last-report.txt`、`status.json`、`history.log` 和 `update.lock`。失败会保留在状态和 systemd journal 中；不会因为单个工具失败而跳过其余工具。工具缺失、更新命令超时或更新后版本检查失败都算失败。
 
-`agent-desktop` 的 npm 安装脚本只对包名显式放行，不使用全局 `--ignore-scripts=false`；链接目标默认是 `~/.npm/bin/agent-desktop`，如果 npm 全局 prefix 不同，需要修改 `tools.json` 的 `link.target`。`codegraph` 和 `agy` 仍由各自的上游更新器决定版本、签名和安装位置；本仓库不复制它们的二进制。自动升级官方 CLI 可能改变 ACP 行为，升级后应重新验证 Antigravity 扩展。
+`agent-desktop` 的 npm 安装脚本只对包名显式放行，不使用全局 `--ignore-scripts=false`；链接目标默认是 `~/.npm/bin/agent-desktop`，如果 npm 全局 prefix 不同，需要修改 `tools.json` 的 `link.target`。`codegraph` 仍由自身的上游更新器决定版本、签名和安装位置；`cliproxyapi` 的版本目录、校验和 systemd 重启由 `gemini-proxy/update.py` 负责；本仓库不复制它们的二进制或凭证。
 
 ## 已追加的技能与工具
 
@@ -198,4 +198,4 @@ python3 -B -m unittest discover -s skills-updater/test -v
 npm run test:skills
 ```
 
-测试使用临时 HOME、本地 Git 上游和模拟 npm/uv/codegraph/agy 命令，不访问网络、不升级真实工具、不修改本机技能。覆盖目录哈希、更新与还原、备份、dry-run、上游移除、自动登记、失败退出、并发锁、非法状态、分阶段替换、安装幂等及回滚；CLI 测试还覆盖版本变化、缺失工具、失败隔离、超时、链接安全和统一入口。真实 systemd 调度和本机来源检查另行验证，离线测试不代替它们。
+测试使用临时 HOME、本地 Git 上游和模拟 npm/uv/codegraph/cliproxyapi 命令，不访问网络、不升级真实工具、不修改本机技能。覆盖目录哈希、更新与还原、备份、dry-run、上游移除、自动登记、失败退出、并发锁、非法状态、分阶段替换、安装幂等及回滚；CLI 测试还覆盖版本变化、缺失工具、失败隔离、超时、链接安全和统一入口。真实 systemd 调度和本机来源检查另行验证，离线测试不代替它们。

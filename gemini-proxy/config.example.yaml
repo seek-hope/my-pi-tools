@@ -1,0 +1,25 @@
+# CLIProxyAPI v8 configuration template.
+# Copy to ~/.config/cliproxyapi/config.yaml and fill in local secrets.
+# Never commit the real config, OAuth files, kv.db, or logs.
+config-version: 8
+
+server:
+  host: "127.0.0.1"
+  port: 8317
+
+management:
+  # Management API is loopback-only. Set a secret key before using it.
+  allow-remote: false
+  secret-key: ""
+
+access:
+  # Local Pi/clients send this key as "Authorization: Bearer ...".
+  api-keys: []
+
+requests:
+  # Optional outbound proxy for Google OAuth/API requests.
+  proxy-url: ""
+
+oauth:
+  # OAuth credential storage; keep this directory private.
+  auth-dir: "~/.cli-proxy-api"

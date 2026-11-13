@@ -66,7 +66,7 @@ export EXA_API_KEY=...
 
 ## 技能与 CLI 自动更新
 
-本机的技能更新，以及 `agent-desktop`、`markitdown`、`codegraph`、`agy` 四个 CLI 的更新，统一由 [skills-updater/](skills-updater/README.md) 管理。systemd timer 保持每天 09:00 后随机延迟 0–10 分钟运行；它是独立主机工具，不是 Pi 扩展。实际技能、来源记录、CLI 状态和备份仍保存在用户目录。
+本机的技能更新，以及 `agent-desktop`、`markitdown`、`codegraph`、`cliproxyapi` 四个 CLI 的更新，统一由 [skills-updater/](skills-updater/README.md) 管理。systemd timer 保持每天 09:00 后随机延迟 0–10 分钟运行；它是独立主机工具，不是 Pi 扩展。实际技能、来源记录、CLI 状态和备份仍保存在用户目录。
 
 ```bash
 python3 skills-updater/install.py --dry-run  # 预览安装/迁移
@@ -75,6 +75,10 @@ python3 skills-updater/install.py            # 备份原入口并链接到仓库
 # 手动统一更新；也可用 --skills-only / --tools-only / --dry-run
 ~/.local/bin/update-pi-toolchain
 ```
+
+### Gemini Pro 反向代理
+
+本机运行的 [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) 也纳入仓库管理：`gemini-proxy/` 提供 systemd 用户服务、版本化更新、OAuth 登录和 Pi 模型同步脚本。代理默认监听 `127.0.0.1:8317`，真实配置和 OAuth 凭证不进入 Git；安装和运维方式见 [gemini-proxy/README.md](gemini-proxy/README.md)。
 
 ## 开发与验证
 

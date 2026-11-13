@@ -106,7 +106,7 @@ class Workspace(unittest.TestCase):
 class CliUpdaterTests(Workspace):
     def test_default_manifest_lists_the_expected_tools(self):
         tools = module("cli_updater", CLI).load_manifest(ROOT / "tools.json")
-        self.assertEqual({tool["id"] for tool in tools}, {"agent-desktop", "markitdown", "codegraph", "agy"})
+        self.assertEqual({tool["id"] for tool in tools}, {"agent-desktop", "markitdown", "codegraph", "cliproxyapi"})
         self.assertTrue(all(tool["enabled"] for tool in tools))
         agent = next(tool for tool in tools if tool["id"] == "agent-desktop")
         self.assertIn("--allow-scripts=agent-desktop", agent["update"])

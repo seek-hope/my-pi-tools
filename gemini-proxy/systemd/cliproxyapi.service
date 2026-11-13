@@ -1,0 +1,15 @@
+[Unit]
+Description=CLIProxyAPI - local Gemini/Claude subscription gateway
+Documentation=https://github.com/router-for-me/CLIProxyAPI
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/.config/cliproxyapi
+ExecStart=%h/.local/bin/cliproxyapi --config %h/.config/cliproxyapi/config.yaml
+Restart=always
+RestartSec=3
+Environment=NO_PROXY=127.0.0.1,localhost,::1
+
+[Install]
+WantedBy=default.target
