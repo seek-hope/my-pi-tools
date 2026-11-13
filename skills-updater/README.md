@@ -130,7 +130,7 @@ CLI 命令、版本检查和超时由 [`tools.json`](tools.json) 声明。每个
 | id | 更新方式 | 说明 |
 | --- | --- | --- |
 | `agent-desktop` | `npm install -g --allow-scripts=agent-desktop agent-desktop@latest` | 安装后确保 `~/.local/bin/agent-desktop` 指向 npm 的 bin；技能文本仍由 Git 更新器同步 |
-| `markitdown` | `uv tool install --force 'markitdown[pptx]'` | 保留 PPTX 读取所需的 extra |
+| `markitdown` | `uv tool install --python 3.12 --force 'markitdown[pptx]'` | 固定 Python 3.12，保留 PPTX 读取所需的 extra |
 | `codegraph` | `codegraph upgrade` | 使用 CodeGraph 自己的版本目录和升级器，不使用 npm 覆盖 |
 | `cliproxyapi` | `update-cliproxyapi` | 从 GitHub Releases 下载、校验 SHA-256、切换版本并重启 `cliproxyapi.service`；由 `gemini-proxy/` 提供 |
 
@@ -186,7 +186,7 @@ uv run --no-project --with-requirements "$HOME/.agents/skills/ppt-master/require
 Anthropic 技能还建议用 `markitdown` 读取内容和做 QA；本机已安装带 PPTX 支持的版本：
 
 ```bash
-uv tool install --force 'markitdown[pptx]'
+uv tool install --python 3.12 --force 'markitdown[pptx]'
 markitdown deck.pptx
 ```
 
