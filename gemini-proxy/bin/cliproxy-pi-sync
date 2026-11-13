@@ -181,6 +181,7 @@ def main() -> None:
 
     text = ensure_provider(MODELS.read_text())
     MODELS.write_text(replace_models_array(text, entries))
+    MODELS.chmod(0o600)
     print("写入 %d 个模型到 %s：\n" % (len(entries), MODELS))
     print("%-26s %9s %8s  %s" % ("id", "ctx", "maxout", "mods"))
     for e, i in zip(entries, ids):
