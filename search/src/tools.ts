@@ -132,6 +132,78 @@ const FETCH_PARAMS = Type.Object(
 	{ additionalProperties: false },
 );
 
+// `details` is for the TUI. `structuredContent` is the separate, programmatic
+// contract consumed by codemode; without outputSchema Pi only gives scripts text.
+const PROVIDER_NAME_SCHEMA = Type.Union([Type.Literal("deepseek"), Type.Literal("exa")]);
+const ERROR_BODY_SCHEMA = Type.Object({
+	kind: Type.String(),
+	status: Type.Union([Type.Number(), Type.Null()]),
+	retryable: Type.Boolean(),
+	message: Type.String(),
+});
+const WARNING_SCHEMA = Type.Object({
+	provider: PROVIDER_NAME_SCHEMA,
+	kind: Type.String(),
+	status: Type.Union([Type.Number(), Type.Null()]),
+	retryable: Type.Boolean(),
+	message: Type.String(),
+});
+const ERROR_OUTPUT_SCHEMA = Type.Object({
+	status: Type.Literal("error"),
+	tool: Type.String(),
+	text: Type.String(),
+	error: ERROR_BODY_SCHEMA,
+});
+const SEARCH_OUTPUT_SCHEMA = Type.Union([
+	Type.Object({
+		status: Type.Literal("ok"),
+		tool: Type.Literal("web_search"),
+		query: Type.String(),
+		count: Type.Number(),
+		needContent: Type.Boolean(),
+		requestedProvider: SEARCH_PROVIDER,
+		providers: Type.Array(PROVIDER_NAME_SCHEMA),
+		resultCount: Type.Number(),
+		fromCache: Type.Boolean(),
+		truncated: Type.Boolean(),
+		durationMs: Type.Number(),
+		text: Type.String(),
+		warnings: Type.Array(WARNING_SCHEMA),
+		results: Type.Array(Type.Object({
+			title: Type.String(),
+			url: Type.String(),
+			site: Type.Union([Type.String(), Type.Null()]),
+			date: Type.Union([Type.String(), Type.Null()]),
+			authority: Type.Number(),
+			score: Type.Number(),
+			providers: Type.Array(PROVIDER_NAME_SCHEMA),
+			snippet: Type.String(),
+			summary: Type.String(),
+			content: Type.Optional(Type.String()),
+		})),
+	}),
+	ERROR_OUTPUT_SCHEMA,
+]);
+const FETCH_OUTPUT_SCHEMA = Type.Union([
+	Type.Object({
+		status: Type.Literal("ok"),
+		tool: Type.Literal("web_fetch"),
+		url: Type.String(),
+		title: Type.String(),
+		provider: PROVIDER_NAME_SCHEMA,
+		bytes: Type.Number(),
+		lines: Type.Number(),
+		truncated: Type.Boolean(),
+		fullPath: Type.Union([Type.String(), Type.Null()]),
+		fromCache: Type.Boolean(),
+		durationMs: Type.Number(),
+		text: Type.String(),
+		content: Type.String(),
+		warnings: Type.Array(WARNING_SCHEMA),
+	}),
+	ERROR_OUTPUT_SCHEMA,
+]);
+
 type Clients = Awaited<ReturnType<WebToolDeps["getClients"]>>;
 
 function missingProviderError(provider?: SearchProvider): WebToolError {
@@ -345,9 +417,11 @@ export async function formatFetchResult(
 
 function errorResult(toolName: string, error: unknown) {
 	const normalized = toWebToolError(error);
+	const text = normalized.toModelText(toolName);
 	return {
-		content: [{ type: "text" as const, text: normalized.toModelText(toolName) }],
+		content: [{ type: "text" as const, text }],
 		details: { error: normalized.toDetails() } satisfies ToolErrorDetails,
+		structuredContent: { status: "error" as const, tool: toolName, text, error: normalized.toDetails() },
 		isError: true,
 	};
 }
@@ -387,6 +461,7 @@ export function registerWebTools(pi: ExtensionAPI, deps: WebToolDeps): void {
 			"Prefer a short, specific query and follow up with web_fetch on the most relevant URL.",
 		],
 		parameters: SEARCH_PARAMS,
+		outputSchema: SEARCH_OUTPUT_SCHEMA,
 		exposure: "direct",
 		executionMode: "parallel",
 
@@ -468,7 +543,28 @@ export function registerWebTools(pi: ExtensionAPI, deps: WebToolDeps): void {
 						providers: result.providers ?? (result.provider ? [result.provider] : []),
 					})),
 				};
-				return { content: [{ type: "text", text: formatted.text }], details };
+				return {
+					content: [{ type: "text", text: formatted.text }],
+					details,
+					structuredContent: {
+						status: "ok" as const,
+						...details,
+						text: formatted.text,
+						warnings: failures.map(({ provider, error }) => ({ provider, ...error.toDetails() })),
+						results: outcome.results.map((result) => ({
+							title: result.title,
+							url: result.url,
+							site: result.site_name,
+							date: result.date,
+							authority: result.authority,
+							score: result.rerank_score,
+							providers: result.providers ?? (result.provider ? [result.provider] : []),
+							snippet: result.snippet,
+							summary: result.summary,
+							...(params.need_content ? { content: result.content } : {}),
+						})),
+					},
+				};
 			} catch (error) {
 				return errorResult(toolName, error);
 			}
@@ -542,6 +638,7 @@ export function registerWebTools(pi: ExtensionAPI, deps: WebToolDeps): void {
 			"If the result is truncated, read the saved temp file with offset/limit instead of refetching.",
 		],
 		parameters: FETCH_PARAMS,
+		outputSchema: FETCH_OUTPUT_SCHEMA,
 		exposure: "direct",
 		executionMode: "parallel",
 
@@ -567,6 +664,15 @@ export function registerWebTools(pi: ExtensionAPI, deps: WebToolDeps): void {
 						return {
 							content: [{ type: "text", text: formatted.text }],
 							details: formatted.details,
+							structuredContent: {
+								status: "ok" as const,
+								...formatted.details,
+								text: formatted.text,
+								content: outcome.content,
+								warnings: lastError
+									? [{ provider: provider === "exa" ? "deepseek" as const : "exa" as const, ...lastError.toDetails() }]
+									: [],
+							},
 						};
 					} catch (error) {
 						const normalized = toWebToolError(error);

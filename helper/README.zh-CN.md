@@ -27,7 +27,8 @@ codemode 示例：
 
 ```javascript
 const result = await tools.helper({ task: "检查 src/export.ts 的 Unicode 文件名处理。" });
-text(result);
+if (result.status === "answered") text(result.output);
+else text({ status: result.status, reason: result.reason, output: result.output });
 ```
 
 脚本会收到结构化的 Helper 结果，包括部分结果和错误结果；继续执行前应检查 `status`。参数校验失败仍可能使调用抛错。宿主要求终止时，会中止父会话当前操作，包括外层 codemode 脚本。

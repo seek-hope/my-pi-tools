@@ -16,7 +16,8 @@ PI_CODEGRAPH_EXPOSURE, PI_CODEGRAPH_WATCH, PI_CODEGRAPH_TIMEOUT,
 PI_CODEGRAPH_COMMAND_TIMEOUT. See the package README.
 No automatic installation, initialization, or global configuration edits.`;
 
-const GUIDANCE = "For indexed code, use mcp__codegraph's codegraph_explore to retrieve relevant source, call paths and change impact before broad file-by-file exploration. In codemode, discover it with searchTools and read describeNamespace('mcp__codegraph') for server instructions. If the project is unindexed or CodeGraph is unavailable, fall back to built-in tools; do not initialize without user authorization. Check stale-source warnings and verify affected files directly when needed; the graph does not replace tests.";
+const GUIDANCE_PREFIX = "For indexed code, use mcp__codegraph's codegraph_explore";
+const GUIDANCE = `${GUIDANCE_PREFIX} to retrieve relevant source, call paths and change impact before broad file-by-file exploration. If the tool is deferred, load it with Pi's tool_search; when codemode is enabled, scripts can discover it with searchTools and read describeNamespace('mcp__codegraph') for server instructions. If the project is unindexed or CodeGraph is unavailable, fall back to built-in tools; do not initialize without user authorization. Check stale-source warnings and verify affected files directly when needed; the graph does not replace tests.`;
 
 function waitForIdle(ctx: ExtensionCommandContext, signal: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -59,9 +60,12 @@ export function registerCodegraph(
       tool.name.startsWith("mcp__codegraph__") && tool.exposure !== "hidden",
     );
     const guidelines = event.systemPromptOptions.promptGuidelines;
-    const index = guidelines.indexOf(GUIDANCE);
-    if (available && index === -1) guidelines.push(GUIDANCE);
-    else if (!available && index !== -1) guidelines.splice(index, 1);
+    // Remove older versions as well, so changing exposure never leaves stale
+    // codemode-only instructions behind after a reload.
+    for (let index = guidelines.length - 1; index >= 0; index--) {
+      if (guidelines[index]?.startsWith(GUIDANCE_PREFIX)) guidelines.splice(index, 1);
+    }
+    if (available) guidelines.push(GUIDANCE);
   });
 
   const report = (text: string, isError = false) => {

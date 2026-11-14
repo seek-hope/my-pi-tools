@@ -27,7 +27,8 @@ Codemode example:
 
 ```javascript
 const result = await tools.helper({ task: "Review src/export.ts for Unicode filename handling." });
-text(result);
+if (result.status === "answered") text(result.output);
+else text({ status: result.status, reason: result.reason, output: result.output });
 ```
 
 Codemode resolves to the structured Helper result, including partial and error results; inspect `status` before continuing. Argument validation failures can reject the call. A host termination stops the parent operation, including an enclosing codemode script.

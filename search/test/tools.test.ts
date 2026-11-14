@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import type { ExtensionAPI, Theme } from "@earendil-works/pi-coding-agent";
+import { Check } from "typebox/value";
 
 import { loadConfig } from "../src/config.ts";
 import type { DeepSeekClient, SearchOutcome } from "../src/deepseek.ts";
@@ -13,6 +14,7 @@ import { registerWebTools } from "../src/tools.ts";
 interface ToolResult {
 	content: Array<{ type: string; text?: string }>;
 	details: unknown;
+	structuredContent?: any;
 	isError?: boolean;
 }
 
@@ -25,6 +27,7 @@ interface CapturedTool {
 	label: string;
 	description: string;
 	parameters: { properties?: Record<string, unknown> };
+	outputSchema?: unknown;
 	execute: (
 		toolCallId: string,
 		params: Record<string, unknown>,
@@ -186,6 +189,40 @@ test("web_search executes and returns text plus structured details", async () =>
 	assert.equal(details.resultCount, 1);
 	assert.equal(details.query, "pi coding agent");
 	assert.equal(details.results[0]?.title, "Pi documentation");
+});
+
+test("codemode receives structured search results, full fetch content and typed errors", async () => {
+	const { byName } = captureTools(fakeClient());
+	const search = byName("web_search");
+	const fetch = byName("web_fetch");
+	assert.ok(search.outputSchema, "web_search must declare an output schema for codemode");
+	assert.ok(fetch.outputSchema, "web_fetch must declare an output schema for codemode");
+
+	const searchResult = await search.execute("call-structured", { query: "pi", need_content: true });
+	assert.equal(searchResult.structuredContent.status, "ok");
+	assert.equal(Check(search.outputSchema as any, searchResult.structuredContent), true);
+	assert.equal(searchResult.structuredContent.results[0].summary, "Everything about the Pi coding agent.");
+	assert.equal(searchResult.structuredContent.results[0].snippet, "short");
+	assert.equal(searchResult.structuredContent.results[0].content, "");
+	assert.deepEqual(searchResult.structuredContent.warnings, []);
+	assert.equal(searchResult.structuredContent.results[0].url, "https://pi.dev/docs");
+
+	const fetchResult = await fetch.execute("call-fetch", { url: "https://example.com/" });
+	assert.equal(fetchResult.structuredContent.status, "ok");
+	assert.equal(Check(fetch.outputSchema as any, fetchResult.structuredContent), true);
+	assert.equal(fetchResult.structuredContent.content, "Body");
+	assert.equal(fetchResult.structuredContent.fullPath, null);
+	assert.equal(fetchResult.structuredContent.provider, "deepseek");
+
+	const failing = fakeClient({
+		search: async () => { throw new WebToolError("rate_limit", "slow down", { status: 429, retryable: true }); },
+	});
+	const failed = await captureTools(failing).byName("web_search").execute("call-error", { query: "x" });
+	assert.equal(failed.isError, true);
+	assert.equal(failed.structuredContent.status, "error");
+	assert.equal(Check(captureTools(failing).byName("web_search").outputSchema as any, failed.structuredContent), true);
+	assert.equal(failed.structuredContent.error.kind, "rate_limit");
+	assert.equal(failed.structuredContent.error.status, 429);
 });
 
 test("web_search reports typed failures as model-readable text", async () => {
@@ -361,6 +398,9 @@ test("web_search keeps partial results silently and notifies the user", async ()
 	assert.equal(result.isError, undefined);
 	const details = result.details as { providers: string[] };
 	assert.deepEqual(details.providers, ["deepseek"]);
+	assert.equal(result.structuredContent.warnings.length, 1);
+	assert.equal(result.structuredContent.warnings[0].provider, "exa");
+	assert.equal(result.structuredContent.warnings[0].kind, "timeout");
 	assert.doesNotMatch(result.content[0]?.text ?? "", /warning|failed/i);
 	assert.equal(notices.length, 1);
 	assert.match(notices[0]!.message, /Exa is unavailable/);
@@ -389,6 +429,9 @@ test("web_fetch auto falls back to Exa silently", async () => {
 	assert.equal(result.isError, undefined);
 	const details = result.details as { provider: string };
 	assert.equal(details.provider, "exa");
+	assert.equal(result.structuredContent.warnings.length, 1);
+	assert.equal(result.structuredContent.warnings[0].provider, "deepseek");
+	assert.equal(result.structuredContent.warnings[0].kind, "timeout");
 	assert.doesNotMatch(result.content[0]?.text ?? "", /provider warning|failed|falling back/i);
 });
 

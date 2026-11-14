@@ -168,6 +168,14 @@ test("guidelines preserve existing prompt text, do not duplicate, and skip hidde
   assert.equal(event.systemPromptOptions.promptGuidelines.length, 2);
   assert.equal(event.systemPromptOptions.promptGuidelines[0], "existing rule");
   assert.match(event.systemPromptOptions.promptGuidelines[1]!, /stale-source/);
+  assert.match(event.systemPromptOptions.promptGuidelines[1]!, /tool_search/);
+
+  // Deferred MCP tools use Pi's tool_search, not the codemode-only searchTools().
+  h.tools[0]!.exposure = "deferred";
+  h.emit("before_agent_start", event);
+  assert.equal(event.systemPromptOptions.promptGuidelines.length, 2);
+  assert.match(event.systemPromptOptions.promptGuidelines[1]!, /tool_search/);
+  assert.match(event.systemPromptOptions.promptGuidelines[1]!, /searchTools/);
 
   // Withdraw the guidance when CodeGraph is no longer reachable.
   h.tools[0]!.exposure = "hidden";

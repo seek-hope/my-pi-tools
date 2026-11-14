@@ -85,12 +85,21 @@ const result = await tools.mcp__codegraph__codegraph_explore({
   projectPath: "/绝对路径/你的项目",
   maxFiles: 5,
 });
-text(result);
+if (result.isError) {
+  text({ error: result.content });
+} else {
+  const source = (result.content ?? [])
+    .filter((block) => block.type === "text")
+    .map((block) => block.text)
+    .join("\n");
+  // Do not dump the whole CallToolResult back into the model context.
+  text(source.length > 12000 ? source.slice(0, 12000) + "\n[output capped]" : source);
+}
 ```
 
-MCP 返回完整 `CallToolResult`，包括 `content` 和可能的 `isError`，不是裸字符串。查询其他项目时可指定 `projectPath`，但额外项目不一定有实时 watcher；注意结果中的陈旧索引提示。新项目是否建索引由用户决定。
+MCP 返回完整 `CallToolResult`，包括 `content` 和可能的 `isError`，不是裸字符串。codemode 脚本应先检查 `isError`，再读取需要的文本或 `structuredContent` 字段；不要把完整结果无条件 `text(result)`，否则大结果会再次触发脚本输出截断。传输失败或参数校验失败会 reject，批量调用可用 `Promise.allSettled()`。查询其他项目时可指定 `projectPath`，但额外项目不一定有实时 watcher；注意结果中的陈旧索引提示。新项目是否建索引由用户决定。
 
-需要仅通过 codemode 暴露工具、减少常驻 schema 时，可在启动 pi 前覆盖默认设置：
+需要仅通过 codemode 暴露工具、减少常驻 schema 时，可在启动 pi 前覆盖默认设置；`deferred` 则通过 Pi 的 `tool_search` 加载工具，不使用 codemode 沙箱里的 `searchTools()`：
 
 ```bash
 PI_CODEGRAPH_EXPOSURE=codemode pi

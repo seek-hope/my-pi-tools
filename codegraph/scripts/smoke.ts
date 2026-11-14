@@ -123,7 +123,13 @@ try {
   const codemode = session.agent.state.tools.find((tool) => tool.name === "codemode");
   assert.ok(codemode);
   const discovered = await codemode.execute("smoke-codemode", {
-    code: `text(await searchTools("codegraph", { namespace: "mcp__codegraph" })); text(await tools.${name}({ query: "greet", projectPath: ${JSON.stringify(cwd)} }));`,
+    code: `
+const found = await searchTools("codegraph", { namespace: "mcp__codegraph" });
+const result = await tools.${name}({ query: "greet", projectPath: ${JSON.stringify(cwd)} });
+if (!result || !Array.isArray(result.content)) throw new Error("MCP result is not a CallToolResult");
+if (result.isError) throw new Error(result.content.filter((block) => block.type === "text").map((block) => block.text).join("\\n"));
+const source = result.content.filter((block) => block.type === "text").map((block) => block.text).join("\\n");
+text({ discovered: found.length, source: source.slice(0, 12000) });`,
   }, AbortSignal.timeout(60_000));
   assert.notEqual(discovered.isError, true, text(discovered.content));
   assert.match(text(discovered.content), /before-/);

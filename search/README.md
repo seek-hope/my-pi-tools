@@ -80,9 +80,36 @@ pi -e /absolute/path/to/my-pi-tools/search/src/index.ts
 - **合并去重**：按规范化 URL 去重，用 reciprocal rank fusion 排序；每条结果标记 `deepseek`、`exa` 或两者。单个 provider 不可用或失败时静默使用另一个 provider 的结果；在 TUI/RPC 中会提示用户检查 search 配置，但不会把 warning 写进模型结果。
 - **抓取回退**：`web_fetch` 的 `auto` 优先 DeepSeek；遇到认证、限流、超时或网络错误时静默回退 Exa，不向模型追加 warning。`blocked_url`、参数错误和调用方取消不会触发回退。
 - **先摘要后正文**：`web_search` 默认 `need_content=false`，只返回摘要；需要细节时对具体 URL 调用 `web_fetch`，省 token。
-- **结果截断**：超过字节或行数预算时截断。默认将全文写入系统临时目录下的 `pi-deepseek-web/*.md`；以结果返回的路径为准，可用 `read` 的 offset/limit 继续读取。设置 `DEEPSEEK_WEB_SPILL=false` 可关闭全文保存。
+- **结果截断**：超过字节或行数预算时截断。`web_fetch` 的全文默认写入系统临时目录下的 `pi-deepseek-web/*.md`；以结果返回的路径为准，可用 `read` 的 offset/limit 继续读取。`web_search` 会提示缩小查询或抓取具体 URL。设置 `DEEPSEEK_WEB_SPILL=false` 可关闭全文保存。
 - **缓存**：相同参数的请求在 TTL 内复用结果；同一 provider 的并发重复请求会合并为一次上游调用。
 - **错误结果**：认证失败、限流、超时或被阻止的 URL 返回带 `kind` 和提示的工具错误，供模型或调用方处理。
+
+### codemode：结构化筛选
+
+两个工具都声明了 `outputSchema`。脚本收到的是对象，而不是已经格式化好的字符串：搜索结果的 `results` 含 `summary`、`snippet`，`need_content=true` 时还含 `content`；抓取的 `content` 是完整正文，`text` 才是给模型看的截断版本。`status === "error"` 表示工具错误，`warnings` 记录部分 provider 失败或抓取回退。
+
+```javascript
+const result = await tools.web_search({
+  query: "Pi coding agent extensions",
+  count: 10,
+  need_content: false,
+});
+if (result.status === "error") {
+  text(result);
+} else {
+  const selected = result.results
+    .filter((item) => item.url.includes("pi.dev"))
+    .slice(0, 3)
+    .map(({ title, url, summary, providers }) => ({ title, url, summary, providers }));
+  text({ results: selected, warnings: result.warnings });
+}
+
+const page = await tools.web_fetch({ url: "https://pi.dev/docs" });
+if (page.status === "error") text(page);
+else text(page.content.slice(0, 12000)); // 先筛选，再输出，避免二次截断
+```
+
+直接调用的文本格式不变；`details` 继续用于 TUI，`structuredContent` 才是脚本的结构化契约。
 
 ### 示例：直接验证 API（不经 Pi）
 
