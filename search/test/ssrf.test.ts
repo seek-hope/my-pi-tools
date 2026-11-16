@@ -130,6 +130,62 @@ test("assertPublicUrl allows public hosts and honors allowPrivateHosts", async (
 	assert.equal(bypass.hostname, "127.0.0.1");
 });
 
+test("assertPublicUrl verifies Fake-IP through DoH without disabling private-address checks", async () => {
+	const calls: string[] = [];
+	const url = await assertPublicUrl("https://example.com/", {
+		lookup: async () => ["198.18.0.18"],
+		dohLookup: async (hostname) => {
+			calls.push(hostname);
+			return ["93.184.216.34"];
+		},
+	});
+	assert.equal(url.hostname, "example.com");
+	assert.deepEqual(calls, ["example.com"]);
+
+	await assert.rejects(
+		assertPublicUrl("https://private.example/", {
+			lookup: async () => ["198.18.1.20"],
+			dohLookup: async () => ["10.0.0.8"],
+		}),
+		/private address 10\.0\.0\.8 through DoH/,
+	);
+	await assert.rejects(
+		assertPublicUrl("https://mixed.example/", {
+			lookup: async () => ["198.18.1.20", "127.0.0.1"],
+			dohLookup: async () => ["93.184.216.34"],
+		}),
+		/private address 127\.0\.0\.1/,
+	);
+});
+
+test("default DoH lookup uses HTTPS, parses A/AAAA and falls back between providers", async () => {
+	const originalFetch = globalThis.fetch;
+	const urls: string[] = [];
+	globalThis.fetch = async (input) => {
+		const url = String(input);
+		urls.push(url);
+		if (url.startsWith("https://cloudflare-dns.com/")) {
+			return new Response("unavailable", { status: 503 });
+		}
+		const type = Number(new URL(url).searchParams.get("type"));
+		return new Response(JSON.stringify({
+			Status: 0,
+			Answer: [{ type, data: type === 1 ? "93.184.216.34" : "2606:4700:4700::1111" }],
+		}), { status: 200, headers: { "content-type": "application/dns-json" } });
+	};
+	try {
+		const result = await assertPublicUrl("https://fake-ip.example/", {
+			lookup: async () => ["198.18.0.1"],
+			timeoutMs: 1000,
+		});
+		assert.equal(result.hostname, "fake-ip.example");
+		assert.ok(urls.some((url) => url.startsWith("https://dns.google/")));
+		assert.ok(urls.every((url) => url.startsWith("https://")));
+	} finally {
+		globalThis.fetch = originalFetch;
+	}
+});
+
 test("assertPublicUrl bounds DNS lookups by timeout and caller cancellation", async () => {
 	const started = Date.now();
 	await assert.rejects(

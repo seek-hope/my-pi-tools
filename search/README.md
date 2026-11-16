@@ -149,6 +149,8 @@ curl -s https://api.exa.ai/search \
 - 解析 DNS 后拒绝回环、私网、链路本地、CGNAT、保留段、组播，以及 IPv4-mapped / NAT64 / 6to4 中嵌入的私网地址；
 - 识别 `2130706433`、`0x7f.1`、`0177.0.0.1` 等历史 IPv4 写法。
 
+对于 Mihomo/Clash 常见的 `198.18.0.0/15` Fake-IP，守卫不会直接放行，而是通过 Cloudflare 和 Google 的 DoH 重新解析真实地址；DoH 返回真实公网地址才允许继续，真实私网地址、DoH 失败或超时仍会拒绝。这样兼容 Fake-IP 网络，同时保留 SSRF 检查。
+
 实际页面抓取由 DeepSeek 或 Exa 完成。本地 DNS 检查决定是否将 URL 交给上游，无法约束上游的解析或抓取过程，因此不等价于上游的网络出站控制。`DEEPSEEK_WEB_ALLOW_PRIVATE_HOSTS=false` 是默认防护设置，不能消除这一边界。
 
 ## 计费
@@ -184,6 +186,6 @@ npm --prefix search run smoke
 | `[rate_limit]` / HTTP 429 | 降低并发与 `count`；扩展会自动按 `Retry-After` 重试 |
 | `[timeout]` | 增大 `DEEPSEEK_SEARCH_TIMEOUT_MS`，或检查到 `api.deepseek.com` / `api.exa.ai` 的网络 |
 | `[config] Exa is not configured` | 设置 `EXA_API_KEY`，或显式使用 `provider="deepseek"` |
-| `[blocked_url]` | 目标被 SSRF 守卫拒绝；确属内网测试环境才可设 `DEEPSEEK_WEB_ALLOW_PRIVATE_HOSTS=1` |
+| `[blocked_url]` / `Fake-IP` | Fake-IP 会经 DoH 复核；若 DoH 不可达或仍返回私网，检查到 `cloudflare-dns.com` / `dns.google` 的 HTTPS 网络；只有确属内网测试环境才可设 `DEEPSEEK_WEB_ALLOW_PRIVATE_HOSTS=1` |
 | 结果被截断 | 用返回的临时文件路径 + `read` 的 offset/limit 继续读，或调大预算 |
 | 想看请求细节 | `DEEPSEEK_WEB_DEBUG=1 pi ...`，日志写到 stderr |

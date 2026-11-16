@@ -35,16 +35,62 @@ export interface UrlGuardOptions {
 	allowPrivateHosts?: boolean;
 	/** Injectable DNS lookup for tests. Defaults to `dns.promises.lookup`. */
 	lookup?: LookupFn;
+	/** Injectable DoH lookup for tests; production uses trusted HTTPS resolvers. */
+	dohLookup?: LookupFn;
 	/** Caller cancellation for the DNS lookup. */
 	signal?: AbortSignal;
 	/** Bound the DNS lookup; the HTTP attempt timeout otherwise starts after it. */
 	timeoutMs?: number;
 }
 
+const DOH_ENDPOINTS = [
+	"https://cloudflare-dns.com/dns-query",
+	"https://dns.google/resolve",
+] as const;
+const DOH_TIMEOUT_MS = 10_000;
+
 const defaultLookup: LookupFn = async (hostname) => {
 	const records = await lookup(hostname, { all: true, verbatim: true });
 	return records.map((record) => record.address);
 };
+
+type DohPayload = {
+	Status?: number;
+	Answer?: Array<{ type?: number; data?: string }>;
+};
+
+/** Resolve through trusted HTTPS DNS when the local resolver returns Fake-IP. */
+async function defaultDohLookup(hostname: string, callerSignal?: AbortSignal): Promise<readonly string[]> {
+	let lastError: unknown;
+	for (const endpoint of DOH_ENDPOINTS) {
+		try {
+			const answers = await Promise.allSettled([1, 28].map(async (type) => {
+				const url = `${endpoint}?name=${encodeURIComponent(hostname)}&type=${type}`;
+				const timeout = AbortSignal.timeout(DOH_TIMEOUT_MS);
+				const signal = callerSignal ? AbortSignal.any([callerSignal, timeout]) : timeout;
+				const response = await fetch(url, {
+					headers: { accept: "application/dns-json" },
+					redirect: "manual",
+					signal,
+				});
+				if (!response.ok) throw new Error(`DoH HTTP ${response.status}`);
+				const payload = await response.json() as DohPayload;
+				if (payload.Status !== undefined && payload.Status !== 0 && payload.Status !== 3) {
+					throw new Error(`DoH status ${payload.Status}`);
+				}
+				return (payload.Answer ?? [])
+					.filter((answer) => answer.type === type && typeof answer.data === "string" && isIP(answer.data))
+					.map((answer) => answer.data!);
+			}));
+			const addresses = [...new Set(answers.flatMap((answer) => answer.status === "fulfilled" ? answer.value : []))];
+			if (addresses.length > 0) return addresses;
+		} catch (error) {
+			lastError = error;
+		}
+	}
+	if (lastError) throw lastError;
+	return [];
+}
 
 /**
  * Resolve with the caller's deadline and cancellation. `dns.promises.lookup`
@@ -185,9 +231,39 @@ export async function assertPublicUrl(raw: string, options: UrlGuardOptions = {}
 	if (addresses.length === 0) {
 		throw new WebToolError("blocked_url", `host "${hostname}" did not resolve to any address`);
 	}
+
+	// Mihomo/Clash Fake-IP commonly uses 198.18/15. It is a local routing
+	// identifier, not the site's real address; verify it through DoH instead of
+	// disabling the private-address guard for every request.
+	const fakeIp = addresses.find(isFakeIp);
+	if (fakeIp === undefined) {
+		for (const address of addresses) {
+			if (isPrivateIp(address)) {
+				throw new WebToolError("blocked_url", `host "${hostname}" resolves to private address ${address}`);
+			}
+		}
+		return url;
+	}
 	for (const address of addresses) {
-		if (isPrivateIp(address)) {
+		if (isPrivateIp(address) && !isFakeIp(address)) {
 			throw new WebToolError("blocked_url", `host "${hostname}" resolves to private address ${address}`);
+		}
+	}
+
+	const dohLookup = options.dohLookup ?? ((host: string) => defaultDohLookup(host, options.signal));
+	let verified: readonly string[];
+	try {
+		verified = await lookupWithBounds(dohLookup, hostname, options);
+	} catch (error) {
+		if (error instanceof WebToolError && ["aborted", "timeout"].includes(error.kind)) throw error;
+		throw new WebToolError("blocked_url", `host "${hostname}" uses Fake-IP ${fakeIp}; trusted DoH verification failed`, { cause: error });
+	}
+	if (verified.length === 0) {
+		throw new WebToolError("blocked_url", `host "${hostname}" did not resolve to a public address through DoH`);
+	}
+	for (const address of verified) {
+		if (isPrivateIp(address)) {
+			throw new WebToolError("blocked_url", `host "${hostname}" resolves to private address ${address} through DoH`);
 		}
 	}
 	return url;
@@ -269,6 +345,12 @@ function ipv4ToInt(ip: string): number | undefined {
 		value = value * 256 + octet;
 	}
 	return value;
+}
+
+function isFakeIp(ip: string): boolean {
+	const value = ipv4ToInt(ip);
+	if (value === undefined) return false;
+	return value >= ipv4ToInt("198.18.0.0")! && value <= ipv4ToInt("198.19.255.255")!;
 }
 
 function isPrivateIpv4(ip: string): boolean {
