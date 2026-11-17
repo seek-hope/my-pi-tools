@@ -3,8 +3,8 @@
  *
  * `web_search` and `web_fetch` are provider-neutral. They use DeepSeek,
  * Exa, or both, depending on configuration and the optional `provider`
- * argument. The default `auto` mode uses every configured provider and
- * merges search results when both are available.
+ * argument. Search defaults to both providers in parallel; when choosing a
+ * single provider, prefer Exa, then DeepSeek. Fetch tries Exa before DeepSeek.
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -73,6 +73,7 @@ type FetchDetails = {
 type WebToolDetails = SearchDetails | FetchDetails | ToolErrorDetails;
 
 const PROVIDERS: readonly SearchProvider[] = ["deepseek", "exa"];
+const FETCH_PRIORITY: readonly SearchProvider[] = ["exa", "deepseek"];
 const SEARCH_PROVIDER = Type.Union(
 	[
 		Type.Literal("auto"),
@@ -451,14 +452,14 @@ export function registerWebTools(pi: ExtensionAPI, deps: WebToolDeps): void {
 	pi.registerTool<typeof SEARCH_PARAMS, WebToolDetails>({
 		name: "web_search",
 		label: "Web search",
-		description: `Search the web through DeepSeek and/or Exa and return ranked results (title, URL, summary, site, date, authority). provider="auto" (default) uses every configured provider and merges results; provider="both" requires both; "deepseek"/"exa" restrict to one. If one configured provider is unavailable or fails, the available provider is used and the user is asked to check the search tool. Use need_content=false first and call web_fetch for pages that matter. Results are cached for ${Math.round(
+		description: `Search the web through Exa and DeepSeek and return ranked results (title, URL, summary, site, date, authority). Prefer both providers together via provider="auto" (default), which queries all configured providers in parallel and merges results. When a single provider is needed, prefer "exa", then "deepseek", unless the user specifies one. provider="both" requires both to be configured. If a provider is unavailable or fails, auto keeps the working provider's results and asks the user to check the search tool. Use need_content=false first and call web_fetch for pages that matter. Results are cached for ${Math.round(
 			config.searchCacheTtlMs / 1000,
 		)}s.`,
 		promptSnippet: "Search the web via DeepSeek and Exa and get ranked, deduplicated results",
 		promptGuidelines: [
-			"Use web_search for current events, external documentation or facts not present in the repository.",
-			"auto uses all configured providers; pass provider=\"deepseek\" or \"exa\" to control cost or use one engine.",
-			"Prefer a short, specific query and follow up with web_fetch on the most relevant URL.",
+			"Use web_search to verify external facts, find research literature, or check current information when the task requires source evidence. Prefer primary sources and official documentation.",
+			"For web_search, prefer both Exa and DeepSeek together via provider=\"auto\"; it queries all configured providers in parallel and merges results. If a single provider is needed, prefer \"exa\", then \"deepseek\", unless the user specifies one.",
+			"Use a short, specific web_search query and need_content=false initially; use web_fetch to inspect important sources before relying on a search summary as evidence.",
 		],
 		parameters: SEARCH_PARAMS,
 		outputSchema: SEARCH_OUTPUT_SCHEMA,
@@ -626,7 +627,7 @@ export function registerWebTools(pi: ExtensionAPI, deps: WebToolDeps): void {
 	pi.registerTool<typeof FETCH_PARAMS, WebToolDetails>({
 		name: "web_fetch",
 		label: "Web fetch",
-		description: `Fetch one http(s) page through DeepSeek or Exa and return its title and Markdown content. provider="auto" (default) prefers DeepSeek and silently falls back to Exa when DeepSeek is unavailable or fails; "deepseek"/"exa" restrict to one. Output is truncated to ${formatBytes(
+		description: `Fetch one http(s) page through Exa or DeepSeek and return its title and Markdown content. provider="auto" (default) prefers Exa and silently falls back to DeepSeek when Exa is unavailable or fails; "exa"/"deepseek" restrict to one. Output is truncated to ${formatBytes(
 			config.maxResultBytes,
 		)} / ${config.maxResultLines} lines; the full text is saved to a temp file for follow-up reads. Private and metadata hosts are blocked. Pages are cached for ${Math.round(
 			config.fetchCacheTtlMs / 1000,
@@ -634,8 +635,8 @@ export function registerWebTools(pi: ExtensionAPI, deps: WebToolDeps): void {
 		promptSnippet: "Fetch a web page as Markdown via DeepSeek or Exa (SSRF-guarded, truncated, cached)",
 		promptGuidelines: [
 			"Use web_fetch when you already have a specific URL, especially one returned by web_search.",
-			"auto prefers DeepSeek and falls back to Exa; pass provider=\"exa\" to force Exa.",
-			"If the result is truncated, read the saved temp file with offset/limit instead of refetching.",
+			"For web_fetch, provider=\"auto\" tries Exa first, then DeepSeek if Exa is unavailable or fails. Use an explicit provider only when the task or user requires it.",
+			"If web_fetch output is truncated, read the saved temp file with offset/limit instead of refetching.",
 		],
 		parameters: FETCH_PARAMS,
 		outputSchema: FETCH_OUTPUT_SCHEMA,
@@ -648,7 +649,7 @@ export function registerWebTools(pi: ExtensionAPI, deps: WebToolDeps): void {
 				const requested = (params.provider ?? "auto") as FetchProviderSelection;
 				const order: SearchProvider[] =
 					requested === "auto"
-						? PROVIDERS.filter((provider) => clients[provider] !== undefined)
+						? FETCH_PRIORITY.filter((provider) => clients[provider] !== undefined)
 						: [requested];
 				if (order.length === 0) throw missingProviderError();
 				if (requested !== "auto" && !clients[requested]) throw missingProviderError(requested);

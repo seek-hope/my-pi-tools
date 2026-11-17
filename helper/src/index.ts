@@ -18,6 +18,10 @@ export function registerHelper(pi: ExtensionAPI, agentDir = getAgentDir()) {
     label: 'Helper',
     description:
       'Delegate one explicit read-only task to a fresh, temporary Pi session. Supply the task, relevant paths and context; parent history is not inherited. Only callable host read/grep/find/ls tools are available, through the parent permission hooks. Pi manages tool errors and context compaction. Returns an answer or partial result, then disposes the session. Cannot modify files, run commands or delegate further.',
+    promptSnippet: 'Delegate a bounded read-only investigation to an isolated Pi session',
+    promptGuidelines: [
+      'Use helper for a substantial, independent read-only investigation with explicit paths, context, and expected output. Prefer direct tools for a simple lookup. Check helper status and supporting evidence before relying on its answer; do not repeat its entire investigation without a concrete gap.',
+    ],
     parameters: requestSchema,
     outputSchema: resultSchema,
     executionMode: 'sequential',

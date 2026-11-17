@@ -125,7 +125,7 @@ function fakeExaClient(overrides: Partial<ExaClient> = {}): ExaClient {
 }
 
 function captureTools(
-	client: DeepSeekClient,
+	client: DeepSeekClient | undefined,
 	config = loadConfig({ DEEPSEEK_API_KEY: "test-key" }),
 	exa?: ExaClient,
 ): { tools: CapturedTool[]; byName: (name: string) => CapturedTool } {
@@ -414,25 +414,120 @@ test("web_search provider=both requires both providers", async () => {
 	assert.match(result.content[0]?.text ?? "", /Exa is not configured/);
 });
 
-test("web_fetch auto falls back to Exa silently", async () => {
+test("web_fetch auto falls back from Exa to DeepSeek silently", async () => {
+	const calls: string[] = [];
 	const deepseek = fakeClient({
+		fetchPage: async (url) => {
+			calls.push("deepseek");
+			return fakeClient().fetchPage(url);
+		},
+	});
+	const exa = fakeExaClient({
 		fetchPage: async () => {
-			throw new WebToolError("timeout", "DeepSeek timed out", { retryable: true });
+			calls.push("exa");
+			throw new WebToolError("timeout", "Exa timed out", { retryable: true });
 		},
 	});
 	const { byName } = captureTools(
 		deepseek,
 		loadConfig({ DEEPSEEK_API_KEY: "test-key", EXA_API_KEY: "test-exa" }),
-		fakeExaClient(),
+		exa,
 	);
 	const result = await byName("web_fetch").execute("call", { url: "https://example.com/page" });
 	assert.equal(result.isError, undefined);
+	assert.deepEqual(calls, ["exa", "deepseek"]);
 	const details = result.details as { provider: string };
-	assert.equal(details.provider, "exa");
+	assert.equal(details.provider, "deepseek");
 	assert.equal(result.structuredContent.warnings.length, 1);
-	assert.equal(result.structuredContent.warnings[0].provider, "deepseek");
+	assert.equal(result.structuredContent.warnings[0].provider, "exa");
 	assert.equal(result.structuredContent.warnings[0].kind, "timeout");
 	assert.doesNotMatch(result.content[0]?.text ?? "", /provider warning|failed|falling back/i);
+});
+
+test("web_search auto starts both providers before waiting for results", async () => {
+	const calls: string[] = [];
+	let release!: () => void;
+	const gate = new Promise<void>((resolve) => { release = resolve; });
+	const { byName } = captureTools(
+		fakeClient({ search: async () => { calls.push("deepseek"); await gate; return SEARCH_OUTCOME; } }),
+		loadConfig({ DEEPSEEK_API_KEY: "test-key", EXA_API_KEY: "test-exa" }),
+		fakeExaClient({ search: async () => { calls.push("exa"); await gate; return EXA_OUTCOME; } }),
+	);
+	const pending = byName("web_search").execute("parallel", { query: "pi" });
+	try {
+		await new Promise((resolve) => setImmediate(resolve));
+		assert.deepEqual(new Set(calls), new Set(["exa", "deepseek"]));
+	} finally {
+		release();
+		await pending;
+	}
+});
+
+test("web_search auto keeps Exa results when DeepSeek fails", async () => {
+	const { byName } = captureTools(
+		fakeClient({ search: async () => { throw new WebToolError("timeout", "DeepSeek timed out"); } }),
+		loadConfig({ DEEPSEEK_API_KEY: "test-key", EXA_API_KEY: "test-exa" }),
+		fakeExaClient(),
+	);
+	const result = await byName("web_search").execute("call", { query: "pi" });
+	assert.equal(result.isError, undefined);
+	assert.deepEqual(result.structuredContent.providers, ["exa"]);
+	assert.equal(result.structuredContent.results[0].url, "https://exa.example/");
+	assert.equal(result.structuredContent.warnings[0].provider, "deepseek");
+});
+
+test("web_search auto uses Exa when only Exa is configured", async () => {
+	const { byName } = captureTools(undefined, loadConfig({ EXA_API_KEY: "test-exa" }), fakeExaClient());
+	const result = await byName("web_search").execute("call", { query: "pi" });
+	assert.equal(result.isError, undefined);
+	assert.deepEqual(result.structuredContent.providers, ["exa"]);
+});
+
+test("web_fetch auto prefers Exa and does not call DeepSeek after success", async () => {
+	let deepseekCalls = 0;
+	const { byName } = captureTools(
+		fakeClient({ fetchPage: async (url) => { deepseekCalls++; return fakeClient().fetchPage(url); } }),
+		loadConfig({ DEEPSEEK_API_KEY: "test-key", EXA_API_KEY: "test-exa" }),
+		fakeExaClient(),
+	);
+	const result = await byName("web_fetch").execute("call", { url: "https://example.com/" });
+	assert.equal(result.isError, undefined);
+	assert.equal(result.structuredContent.provider, "exa");
+	assert.equal(result.structuredContent.content, "Exa body");
+	assert.deepEqual(result.structuredContent.warnings, []);
+	assert.equal(deepseekCalls, 0);
+});
+
+for (const kind of ["blocked_url", "invalid_input", "aborted"] as const) {
+	test(`web_fetch does not fall back after Exa returns ${kind}`, async () => {
+		let deepseekCalls = 0;
+		const { byName } = captureTools(
+			fakeClient({ fetchPage: async (url) => { deepseekCalls++; return fakeClient().fetchPage(url); } }),
+			loadConfig({ DEEPSEEK_API_KEY: "test-key", EXA_API_KEY: "test-exa" }),
+			fakeExaClient({ fetchPage: async () => { throw new WebToolError(kind, "stop"); } }),
+		);
+		const result = await byName("web_fetch").execute("call", { url: "https://example.com/" });
+		assert.equal(result.isError, true);
+		assert.equal(result.structuredContent.error.kind, kind);
+		assert.equal(deepseekCalls, 0);
+	});
+}
+
+test("web_fetch honors explicit provider selection without automatic fallback", async () => {
+	const calls: string[] = [];
+	const { byName } = captureTools(
+		fakeClient({ fetchPage: async (url) => { calls.push("deepseek"); return fakeClient().fetchPage(url); } }),
+		loadConfig({ DEEPSEEK_API_KEY: "test-key", EXA_API_KEY: "test-exa" }),
+		fakeExaClient({ fetchPage: async () => { calls.push("exa"); throw new WebToolError("timeout", "Exa timed out"); } }),
+	);
+	const fetch = byName("web_fetch");
+	const deepseek = await fetch.execute("explicit-deepseek", { url: "https://example.com/", provider: "deepseek" });
+	assert.equal(deepseek.structuredContent.provider, "deepseek");
+	assert.deepEqual(calls, ["deepseek"]);
+	calls.length = 0;
+	const exa = await fetch.execute("explicit-exa", { url: "https://example.com/", provider: "exa" });
+	assert.equal(exa.isError, true);
+	assert.deepEqual(calls, ["exa"]);
 });
 
 test("web_search auto uses the configured provider and notifies the user when the other is missing", async () => {

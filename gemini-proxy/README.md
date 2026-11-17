@@ -1,6 +1,6 @@
 # Gemini Pro 反向代理管理
 
-把本机的 [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) 纳入本仓库管理。CLIProxyAPI 将 Gemini/Claude 订阅额度转换为本地 OpenAI 兼容 API，Pi 通过 `models.json` 的 `cliproxy` provider 使用它。
+提供 [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) 的主机安装、服务管理、版本更新和 Pi 模型同步。CLIProxyAPI 将 Gemini/Claude 订阅额度转换为本地 OpenAI 兼容 API，Pi 通过 `models.json` 的 `cliproxy` provider 使用它。
 
 代理默认只监听 `127.0.0.1:8317`。真实配置、OAuth 凭证、`kv.db`、日志和 API key 都不进入 Git。
 
@@ -50,7 +50,7 @@ cliproxy-pi-sync --verify   # 可选：真实请求验证
 
 Google Antigravity 的 `429 RESOURCE_EXHAUSTED` 不一定代表额度耗尽。先比较同一账号、同一模型的最小请求与真实 Pi 请求：最小请求成功、完整系统提示失败时，应检查提示文字，而不是盲目重试、重新登录或关闭冷却。
 
-在 Pi 1.5.2 + CLIProxyAPI 8.0.75 上，已独立复现两处固定文字触发上游 429：Pi 身份说明的首句，以及文档索引中关于 codemode 和非 LLM 模型的描述。`config.example.yaml` 已包含经过真实请求验证的精确等义替换：
+`config.example.yaml` 在 `oauth.providers.antigravity.sensitive-words-replace` 中配置了 Pi 默认身份说明与文档索引的精确等义替换：
 
 ```yaml
 oauth:
@@ -77,7 +77,7 @@ update-cliproxyapi
 
 ## macOS（launchd）
 
-同一套 `install.py` 会自动识别 macOS，不再使用 systemd：
+同一套 `install.py` 会自动识别 macOS，使用 launchd 管理服务：
 
 ```bash
 python3 gemini-proxy/install.py --dry-run

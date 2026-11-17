@@ -17,7 +17,7 @@ PI_CODEGRAPH_COMMAND_TIMEOUT. See the package README.
 No automatic installation, initialization, or global configuration edits.`;
 
 const GUIDANCE_PREFIX = "For indexed code, use mcp__codegraph's codegraph_explore";
-const GUIDANCE = `${GUIDANCE_PREFIX} to retrieve relevant source, call paths and change impact before broad file-by-file exploration. If the tool is deferred, load it with Pi's tool_search; when codemode is enabled, scripts can discover it with searchTools and read describeNamespace('mcp__codegraph') for server instructions. If the project is unindexed or CodeGraph is unavailable, fall back to built-in tools; do not initialize without user authorization. Check stale-source warnings and verify affected files directly when needed; the graph does not replace tests.`;
+const GUIDANCE = `${GUIDANCE_PREFIX} when available: start with it for repository architecture, symbol relationships, bug investigation, and change impact. Its 'call FIRST' priority applies to indexed-code investigation; stable conceptual questions, literature research, and reading an already-known file can use the appropriate direct tools. Treat returned current source as already read; reopen only missing, stale, or changed portions. If deferred, load it with Pi's tool_search; codemode scripts can use searchTools and describeNamespace('mcp__codegraph'). If unindexed or unavailable, fall back to built-in tools; do not initialize without user authorization. Check stale-source warnings and verify affected files when needed; the graph does not replace tests.`;
 
 function waitForIdle(ctx: ExtensionCommandContext, signal: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -56,9 +56,11 @@ export function registerCodegraph(
     await pending;
   });
   pi.on("before_agent_start", (event) => {
-    const available = pi.getAllTools().some((tool) =>
-      tool.name.startsWith("mcp__codegraph__") && tool.exposure !== "hidden",
-    );
+    const tools = pi.getAllTools().filter((tool) => tool.name.startsWith("mcp__codegraph__"));
+    // MCP may finish connecting after before_agent_start but before the first
+    // provider request. Include conditional guidance during that startup window;
+    // remove it when the host explicitly withdraws all CodeGraph tools as hidden.
+    const available = tools.length === 0 || tools.some((tool) => tool.exposure !== "hidden");
     const guidelines = event.systemPromptOptions.promptGuidelines;
     // Remove older versions as well, so changing exposure never leaves stale
     // codemode-only instructions behind after a reload.

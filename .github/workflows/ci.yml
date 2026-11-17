@@ -31,6 +31,7 @@ jobs:
             codegraph/package-lock.json
             search/package-lock.json
             helper/package-lock.json
+            prompt-profile/package-lock.json
       - name: Install native navigation tools
         run: |
           sudo apt-get update
@@ -43,6 +44,9 @@ jobs:
         run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Install Helper dependencies
         working-directory: helper
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Install prompt profile dependencies
+        working-directory: prompt-profile
         run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Resolve Pi host version
         id: pi
@@ -59,6 +63,7 @@ jobs:
           npm --prefix codegraph install --no-save --package-lock=false --ignore-scripts --no-audit --no-fund "@earendil-works/pi-coding-agent@$PI_TEST_VERSION"
           npm --prefix search install --no-save --package-lock=false --ignore-scripts --no-audit --no-fund "@earendil-works/pi-coding-agent@$PI_TEST_VERSION" "@earendil-works/pi-tui@$PI_TEST_VERSION"
           npm --prefix helper install --no-save --package-lock=false --ignore-scripts --no-audit --no-fund "@earendil-works/pi-ai@$PI_TEST_VERSION" "@earendil-works/pi-coding-agent@$PI_TEST_VERSION"
+          npm --prefix prompt-profile install --no-save --package-lock=false --ignore-scripts --no-audit --no-fund "@earendil-works/pi-ai@$PI_TEST_VERSION" "@earendil-works/pi-coding-agent@$PI_TEST_VERSION"
       - name: Typecheck and test
         env:
           PI_OFFLINE: "1"
@@ -69,7 +74,7 @@ jobs:
           PI_OFFLINE: "1"
           PI_TELEMETRY: "0"
         run: |
-          for package in codegraph search helper; do
+          for package in codegraph search helper prompt-profile; do
             entry=src/index.ts
             if [ "$package" = helper ]; then entry=extensions/index.ts; fi
             output=$(node "$package/node_modules/@earendil-works/pi-coding-agent/dist/cli.js" --offline --no-extensions -e "$PWD/$package/$entry" --list-models __compat_load__ 2>&1)

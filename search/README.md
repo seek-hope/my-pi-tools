@@ -76,9 +76,9 @@ pi -e /absolute/path/to/my-pi-tools/search/src/index.ts
 
 工具行为要点：
 
-- **provider 选择**：默认 `auto` 会查询所有已配置 provider；两者都可用时合并结果。只想用单一来源时传 `provider="deepseek"` 或 `provider="exa"`；`both` 要求两者都配置。
+- **provider 选择**：搜索优先同时使用 Exa 和 DeepSeek：默认 `provider="auto"` 会并行查询所有已配置来源并合并结果。需要单一来源时，优先 `provider="exa"`，其次 `provider="deepseek"`；用户明确指定来源时按指定执行。`both` 要求两者均已配置。
 - **合并去重**：按规范化 URL 去重，用 reciprocal rank fusion 排序；每条结果标记 `deepseek`、`exa` 或两者。单个 provider 不可用或失败时静默使用另一个 provider 的结果；在 TUI/RPC 中会提示用户检查 search 配置，但不会把 warning 写进模型结果。
-- **抓取回退**：`web_fetch` 的 `auto` 优先 DeepSeek；遇到认证、限流、超时或网络错误时静默回退 Exa，不向模型追加 warning。`blocked_url`、参数错误和调用方取消不会触发回退。
+- **抓取回退**：`web_fetch` 在 `auto` 下优先走 Exa；Exa 未配置或遇到认证、限流、超时或网络错误时回退到 DeepSeek。`blocked_url`、参数错误和调用方取消不触发回退。显式指定来源时不自动回退。
 - **先摘要后正文**：`web_search` 默认 `need_content=false`，只返回摘要；需要细节时对具体 URL 调用 `web_fetch`，省 token。
 - **结果截断**：超过字节或行数预算时截断。`web_fetch` 的全文默认写入系统临时目录下的 `pi-deepseek-web/*.md`；以结果返回的路径为准，可用 `read` 的 offset/limit 继续读取。`web_search` 会提示缩小查询或抓取具体 URL。设置 `DEEPSEEK_WEB_SPILL=false` 可关闭全文保存。
 - **缓存**：相同参数的请求在 TTL 内复用结果；同一 provider 的并发重复请求会合并为一次上游调用。
@@ -109,7 +109,7 @@ if (page.status === "error") text(page);
 else text(page.content.slice(0, 12000)); // 先筛选，再输出，避免二次截断
 ```
 
-直接调用的文本格式不变；`details` 继续用于 TUI，`structuredContent` 才是脚本的结构化契约。
+直接调用返回格式化文本；`details` 用于 TUI，`structuredContent` 是脚本的结构化契约。
 
 ### 示例：直接验证 API（不经 Pi）
 
@@ -155,7 +155,7 @@ curl -s https://api.exa.ai/search \
 
 ## 计费
 
-搜索与抓取分别由 [DeepSeek](https://api-docs.deepseek.com/) 和 [Exa](https://exa.ai/pricing) 计费，与模型 token 分开。默认 `auto` 在两个 provider 都配置时会同时调用两者；控制成本时可用 `provider="deepseek"` 或 `"exa"`、调小 `count`，并保持 `need_content=false`。缓存命中与请求合并都会减少实际调用次数。
+搜索与抓取分别由 [DeepSeek](https://api-docs.deepseek.com/) 和 [Exa](https://exa.ai/pricing) 计费，与模型 token 分开。`web_search` 默认 `auto` 在两个 provider 都配置时会同时调用两者；需要控制成本而使用单一来源时，优先 `provider="exa"`，其次 `"deepseek"`，也可调小 `count` 并保持 `need_content=false`。`web_fetch` 默认先调用 Exa，仅在需要回退时调用 DeepSeek。缓存命中与请求合并都会减少实际调用次数。
 
 ## 开发与验证
 

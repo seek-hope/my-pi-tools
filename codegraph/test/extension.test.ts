@@ -154,11 +154,14 @@ test("a new session gets a fresh cancellation signal", async () => {
   assert.equal(h.calls[0]?.[2].signal?.aborted, false);
 });
 
-test("guidelines preserve existing prompt text, do not duplicate, and skip hidden tools", () => {
+test("guidelines cover MCP startup, preserve existing text, and withdraw for hidden tools", () => {
   const h = harness();
   const event = { systemPromptOptions: { promptGuidelines: ["existing rule"] } };
   h.emit("before_agent_start", event);
-  assert.deepEqual(event.systemPromptOptions.promptGuidelines, ["existing rule"]);
+  assert.equal(event.systemPromptOptions.promptGuidelines.length, 2);
+  assert.equal(event.systemPromptOptions.promptGuidelines[0], "existing rule");
+  assert.match(event.systemPromptOptions.promptGuidelines[1]!, /when available/);
+  assert.match(event.systemPromptOptions.promptGuidelines[1]!, /already-known file/);
   h.tools.push({ name: "mcp__codegraph__codegraph_explore", exposure: "hidden" });
   h.emit("before_agent_start", event);
   assert.equal(event.systemPromptOptions.promptGuidelines.length, 1);

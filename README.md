@@ -2,17 +2,18 @@
 
 [![CI](https://github.com/seek-hope/my-pi-tools/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/seek-hope/my-pi-tools/actions/workflows/ci.yml)
 
-三个面向 [Pi](https://github.com/earendil-works/pi) coding agent 的独立扩展，外加主机技能/CLI 更新工具。模型工具默认同时支持直接调用和 codemode；使用脚本调用时需启用 Pi 的 codemode：
+四个面向 [Pi](https://github.com/earendil-works/pi) coding agent 的独立扩展，外加主机技能/CLI 更新与代理管理工具。模型工具默认同时支持直接调用和 codemode；使用脚本调用时需启用 Pi 的 codemode：
 
 | 扩展 | 包名 | 能力 | 额外依赖 |
 | --- | --- | --- | --- |
 | [CodeGraph](codegraph/README.md) | `pi-codegraph` | 通过原生 MCP 查询源码、调用路径和修改影响，用 `/codegraph` 管理索引 | CodeGraph CLI |
 | [Search](search/README.md) | `pi-deepseek-web` | DeepSeek + Exa 网页搜索与抓取，合并结果并处理单源失败 | 至少一个 provider 的 API Key |
 | [Helper](helper/README.zh-CN.md) | `my-pi-helper` | 临时只读 Pi 会话，使用原生上下文管理并保留主会话权限 hook | 宿主工具与已配置模型 |
+| [Prompt Profile](prompt-profile/README.md) | `pi-research-coding-profile` | 科研与编程角色、工作原则、文档指引及回复风格 | 无 |
 
 ## 环境与安装
 
-要求 Node.js **≥ 22.19**。Helper 支持 Pi **≥ 1.5.0** 稳定版；CodeGraph 的 peer 范围为 `>=1.3.0`，Search 为 `*`，具体测试范围见各包文档。CodeGraph CLI 使用 **1.6.2**。CI 覆盖 Linux，其他平台暂无测试覆盖。
+要求 Node.js **≥ 22.19**。Helper 和 Prompt Profile 要求 Pi **≥ 1.5.0**；CodeGraph 的 peer 范围为 `>=1.3.0`，Search 为 `*`，具体测试范围见各包文档。CodeGraph CLI 使用 **1.6.2**。CI 覆盖 Linux，其他平台不在 CI 测试范围内。
 
 在仓库根目录执行需要的安装命令：
 
@@ -20,9 +21,10 @@
 pi install ./codegraph
 pi install ./search
 pi install ./helper
+pi install ./prompt-profile
 ```
 
-三个包均未发布到 npm，使用本地路径安装。仅对当前项目安装可用 `pi install -l /绝对路径/my-pi-tools/<包>`；临时加载使用 `pi -e <入口文件>`，其中 CodeGraph 和 Search 的入口是 `src/index.ts`，Helper 是 `extensions/index.ts`。在已运行的 Pi 中执行 `/reload`。
+四个包均使用本地路径安装，未发布到 npm。仅对当前项目安装可用 `pi install -l /绝对路径/my-pi-tools/<包>`；临时加载使用 `pi -e <入口文件>`，其中 CodeGraph、Search 和 Prompt Profile 的入口是 `src/index.ts`，Helper 是 `extensions/index.ts`。在已运行的 Pi 中执行 `/reload`。
 
 ## 快速上手
 
@@ -47,7 +49,7 @@ export DEEPSEEK_API_KEY=...
 export EXA_API_KEY=...
 ```
 
-让模型调用 `web_search` / `web_fetch`。搜索默认查询所有已配置来源并合并结果；抓取默认优先 DeepSeek，失败时回退 Exa。建议先搜索摘要，再抓取需要的页面。来源选择、配置和费用说明见 [Search README](search/README.md)。
+让模型调用 `web_search` / `web_fetch`。搜索优先通过 `auto` 同时查询 Exa 和 DeepSeek 并合并结果；需要单一来源时优先 Exa，其次 DeepSeek。抓取默认先用 Exa，不可用或失败时回退 DeepSeek。建议先搜索摘要，再抓取需要的页面。来源选择、配置和费用说明见 [Search README](search/README.md)。
 
 ### Helper
 
@@ -64,6 +66,10 @@ export EXA_API_KEY=...
 
 只读工具与上下文隔离不等于文件系统沙箱；模型回答也不等于独立验收。工具配置、结果字段和其他限制见 [Helper 中文说明](helper/README.zh-CN.md)或 [English README](helper/README.md)。
 
+### Prompt Profile
+
+将默认角色设为 **researcher and coding expert**，通过独立分区提供科研证据、可复现性、代码修改、权限与回复原则。使用 `/prompt-profile` 查看角色和工作原则，使用 `/response-style` 查看回复风格。它不注册模型工具，也不替代工具权限控制。提示词组合规则见 [Prompt Profile README](prompt-profile/README.md)。
+
 ## 技能与 CLI 自动更新
 
 本机的技能更新，以及 `agent-desktop`、`markitdown`、`codegraph`、`cliproxyapi` 四个 CLI 的更新，统一由 [skills-updater/](skills-updater/README.md) 管理。Linux 使用 systemd、macOS 使用 launchd，均保持每天 09:00 后随机延迟 0–10 分钟运行；它是独立主机工具，不是 Pi 扩展。实际技能、来源记录、CLI 状态和备份仍保存在用户目录。
@@ -78,19 +84,20 @@ python3 skills-updater/install.py            # 备份原入口并链接到仓库
 
 ### Gemini Pro 反向代理
 
-本机运行的 [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) 也纳入仓库管理：`gemini-proxy/` 提供 systemd 用户服务、版本化更新、OAuth 登录和 Pi 模型同步脚本。代理默认监听 `127.0.0.1:8317`，真实配置和 OAuth 凭证不进入 Git；安装和运维方式见 [gemini-proxy/README.md](gemini-proxy/README.md)。
+[gemini-proxy/](gemini-proxy/README.md) 提供 [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) 的 systemd/launchd 服务、版本化更新、OAuth 登录和 Pi 模型同步脚本。代理默认监听 `127.0.0.1:8317`，真实配置和 OAuth 凭证不进入 Git；安装和运维方式见其 README。
 
 ## 开发与验证
 
-三个包分别管理依赖，根目录只提供聚合脚本，不使用 npm workspaces：
+四个包分别管理依赖，根目录只提供聚合脚本，不使用 npm workspaces：
 
 ```bash
 npm --prefix codegraph ci --ignore-scripts
 npm --prefix search ci --ignore-scripts
 npm --prefix helper ci --ignore-scripts
+npm --prefix prompt-profile ci --ignore-scripts
 
-npm run check   # 三包类型检查
-npm test        # 三包及技能/CLI 更新器离线测试（另需 Python ≥ 3.10）
+npm run check   # 四包类型检查
+npm test        # 四包及技能/CLI 更新器离线测试（另需 Python ≥ 3.10）
 npm run smoke   # 真实 Pi + CodeGraph 集成测试，需 CodeGraph CLI
 ```
 
@@ -103,7 +110,7 @@ npm --prefix helper run check:format
 npm --prefix helper run check:compat
 ```
 
-`check:compat` 自动发现本机安装的 Pi ≥ 1.5.0 稳定版，在临时目录检查 Helper 类型、完整测试和独立扩展加载。[CI](.github/workflows/ci.yml) 对三个包检查 Pi 1.5.0 基线与最新稳定版，在 Node 22/24 上运行类型检查、测试和独立加载，并运行真实 Pi/CodeGraph smoke。
+`check:compat` 自动发现本机安装的 Pi ≥ 1.5.0 稳定版，在临时目录检查 Helper 类型、完整测试和独立扩展加载。[CI](.github/workflows/ci.yml) 对四个包检查 Pi 1.5.0 基线与最新稳定版，在 Node 22/24 上运行类型检查、测试和独立加载，并运行真实 Pi/CodeGraph smoke。
 
 ## 文档导航
 
@@ -113,7 +120,9 @@ npm --prefix helper run check:compat
 | [search/README.md](search/README.md) | 来源选择、缓存与截断、安全边界、费用与排障 |
 | [helper/README.md](helper/README.md) / [中文](helper/README.zh-CN.md) | 调用接口、工具权限、限制、配置与验证命令 |
 | [helper/DESIGN.md](helper/DESIGN.md) | 会话构建、权限转发、取消清理、用量统计与源码索引 |
-| [skills-updater/README.md](skills-updater/README.md) | 技能与 CLI 自动更新、systemd 安装、来源、报告和备份恢复 |
+| [prompt-profile/README.md](prompt-profile/README.md) | 科研与编程角色、提示词分区、扩展组合和查看命令 |
+| [skills-updater/README.md](skills-updater/README.md) | 技能与 CLI 自动更新、systemd/launchd 安装、来源、报告和备份恢复 |
+| [gemini-proxy/README.md](gemini-proxy/README.md) | CLIProxyAPI 安装、配置、模型同步、更新和运维 |
 
 ## License
 
