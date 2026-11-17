@@ -46,6 +46,25 @@ cliproxy-pi-sync --verify   # 可选：真实请求验证
 
 `cliproxy-pi-sync` 只保留 Claude 系列和 Gemini 3.8+，并自动创建缺失的 `cliproxy` provider；provider 名称是 `Gemini Pro (CLIProxyAPI)`。写入 `models.json` 后，在 Pi 中 `/reload` 或重启 Pi。
 
+## 有额度但返回 429
+
+Google Antigravity 的 `429 RESOURCE_EXHAUSTED` 不一定代表额度耗尽。先比较同一账号、同一模型的最小请求与真实 Pi 请求：最小请求成功、完整系统提示失败时，应检查提示文字，而不是盲目重试、重新登录或关闭冷却。
+
+在 Pi 1.5.2 + CLIProxyAPI 8.0.75 上，已独立复现两处固定文字触发上游 429：Pi 身份说明的首句，以及文档索引中关于 codemode 和非 LLM 模型的描述。`config.example.yaml` 已包含经过真实请求验证的精确等义替换：
+
+```yaml
+oauth:
+  providers:
+    antigravity:
+      sensitive-words-replace:
+        "You are a coding assistant running inside pi, a coding agent harness.": "Assist with software development using the tools provided by Pi."
+        "codemode scripts and non-LLM models such as classifiers and image models (docs/codemode.md)": "codemode usage, classification, and image generation (docs/codemode.md)"
+```
+
+已有安装需把这两条规则合并到本机配置的 `oauth.providers.antigravity` 下；保留原有 `auth-dir` 等字段，不要创建重复的 `oauth` 键。安装器和每日二进制更新器不会覆盖已有配置。CLIProxyAPI 会热加载，无需修改 Pi 的系统提示或重新授权。
+
+规则只改写系统提示中这两段原文，不使用隐藏字符，不删除权限约束，不改用户消息、工具定义或模型路由。它们不是所有 429 的通用解法；配额、并发和上游服务异常仍需分别检查。`cliproxy-pi-sync --verify` 仅验证最小请求，不能代替完整 Pi 会话验收。诊断日志可能含完整对话，应留在权限受限的本机目录，不要上传原始日志。
+
 ## 更新
 
 ```bash
