@@ -99,6 +99,61 @@ class Workspace(unittest.TestCase):
 
 
 class UpdaterTests(Workspace):
+    def test_materialize_batches_missing_blobs_before_checkout(self):
+        listing = "100644 blob aaaa\tfile-a\n100644 blob bbbb\tfile-b\n100644 blob aaaa\tduplicate\n"
+        responses = [
+            subprocess.CompletedProcess([], 0, listing, ""),
+            subprocess.CompletedProcess([], 0, "aaaa missing\nbbbb missing\n", ""),
+            subprocess.CompletedProcess([], 0, "", ""),
+            subprocess.CompletedProcess([], 0, "", ""),
+        ]
+        mirror = str(self.repo)
+        with patch.object(self.u, "run", side_effect=responses) as run:
+            self.assertEqual(self.u.materialize(mirror, "revision", "skills/example"), str(self.repo / "skills/example"))
+        calls = run.call_args_list
+        self.assertEqual(len(calls), 4)
+        self.assertEqual(calls[1].kwargs["env"]["GIT_NO_LAZY_FETCH"], "1")
+        self.assertEqual(calls[1].kwargs["input"], "aaaa\nbbbb\n")
+        self.assertIn("fetch", calls[2].args[0])
+        self.assertEqual(calls[2].kwargs["input"], "aaaa\nbbbb\n")
+        self.assertEqual(calls[3].args[0], ["git", "-C", mirror, "checkout", "revision", "--", "skills/example"])
+
+    def test_partial_clone_prefetches_and_materializes_files(self):
+        folder = self.upstream()
+        for index in range(4):
+            (self.repo / folder / f"file-{index}.txt").write_text(f"content-{index}")
+        self.commit()
+        self.git("-C", str(self.repo), "config", "uploadpack.allowFilter", "true")
+        self.git("-C", str(self.repo), "config", "uploadpack.allowReachableSHA1InWant", "true")
+        mirror = Path(self.tmp.name) / "partial"
+        self.git("clone", "--filter=blob:none", "--no-checkout", "--depth=1", self.repo.as_uri(), str(mirror))
+        commit = self.git("-C", str(mirror), "rev-parse", "HEAD")
+        blob = self.git("-C", str(self.repo), "rev-parse", f"HEAD:{folder}/SKILL.md")
+        probe = subprocess.run(
+            ["git", "-C", str(mirror), "cat-file", "--batch-check"],
+            input=blob + "\n", capture_output=True, text=True,
+            env=dict(os.environ, GIT_NO_LAZY_FETCH="1"), check=True,
+        )
+        self.assertIn("missing", probe.stdout)
+        directory = self.u.materialize(str(mirror), commit, folder)
+        self.assertEqual(Path(directory, "file-3.txt").read_text(), "content-3")
+        self.assertEqual(self.u.dir_hash(directory), self.git("-C", str(self.repo), "rev-parse", f"HEAD:{folder}"))
+
+    def test_prefetch_failure_preserves_materialized_cache(self):
+        cached = self.repo / "skills/example"
+        cached.mkdir(parents=True)
+        (cached / "keep.txt").write_text("keep")
+        responses = [
+            subprocess.CompletedProcess([], 0, "100644 blob aaaa\tfile-a\n", ""),
+            subprocess.CompletedProcess([], 0, "aaaa missing\n", ""),
+            subprocess.CompletedProcess([], 1, "", "network failure"),
+        ]
+        with patch.object(self.u, "run", side_effect=responses) as run:
+            with self.assertRaisesRegex(RuntimeError, "prefetch.*network failure"):
+                self.u.materialize(str(self.repo), "revision", "skills/example")
+        self.assertEqual((cached / "keep.txt").read_text(), "keep")
+        self.assertEqual(run.call_count, 3)
+
     def test_hash_matches_upstream_and_ignores_python_cache(self):
         folder = self.upstream()
         expected = self.register()

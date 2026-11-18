@@ -20,6 +20,7 @@ LAUNCHD = HOME / "Library/LaunchAgents"
 LABEL = "com.my-pi-tools.update-pi-toolchain"
 PLIST = LAUNCHD / f"{LABEL}.plist"
 TEMPLATE = ROOT / "launchd/com.my-pi-tools.update-pi-toolchain.plist"
+RUNTIME = HOME / ".local/share/my-pi-tools"
 PROXY_UPDATE_LABEL = "com.my-pi-tools.cliproxyapi-update"
 PROXY_UPDATE_PLIST = LAUNCHD / f"{PROXY_UPDATE_LABEL}.plist"
 LINKS = {
@@ -34,9 +35,46 @@ def run(args: list[str]) -> subprocess.CompletedProcess[str]:
     return subprocess.run(args, capture_output=True, text=True, check=False)
 
 
+def deploy_runtime(dry_run: bool) -> dict[str, Path]:
+    """Keep launchd's executable dependency chain outside TCC-protected folders."""
+    links = {
+        name: RUNTIME / "skills-updater" / source.relative_to(ROOT)
+        for name, source in LINKS.items()
+    }
+    sources = {links[name]: source for name, source in LINKS.items()}
+    sources[RUNTIME / "skills-updater/tools.json"] = ROOT / "tools.json"
+    proxy = RUNTIME / "gemini-proxy/update.py"
+    sources[proxy] = ROOT.parent / "gemini-proxy/update.py"
+    links["update-cliproxyapi"] = proxy
+
+    for target, source in sources.items():
+        if not source.is_file():
+            raise SystemExit(f"missing source: {source}")
+        parents = [RUNTIME]
+        for part in target.relative_to(RUNTIME).parts[:-1]:
+            parents.append(parents[-1] / part)
+        if any(parent.is_symlink() for parent in parents) or target.is_symlink():
+            raise SystemExit(f"refusing symlink in runtime path: {target}")
+        if target.is_file() and target.read_bytes() == source.read_bytes():
+            if not dry_run:
+                target.chmod(source.stat().st_mode & 0o777)
+            continue
+        print(f"deploy  {source} -> {target}")
+        if dry_run:
+            continue
+        for parent in parents:
+            parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            parent.chmod(0o700)
+        with tempfile.TemporaryDirectory(prefix=".deploy-", dir=target.parent) as work:
+            staged = Path(work) / target.name
+            shutil.copy2(source, staged)
+            os.replace(staged, target)
+    return links
+
+
 def link(source: Path, target: Path, dry_run: bool, stamp: str) -> None:
     source = source.resolve()
-    if not source.exists():
+    if not dry_run and not source.is_file():
         raise SystemExit(f"missing source: {source}")
     if target.is_symlink() and target.resolve() == source:
         print(f"ok      {target}")
@@ -68,7 +106,8 @@ def install_timer(dry_run: bool, stamp: str) -> int:
     if not shutil.which("launchctl"):
         print("warning: launchctl is unavailable", file=sys.stderr)
         return 1
-    LAUNCHD.mkdir(parents=True, exist_ok=True)
+    if not dry_run:
+        LAUNCHD.mkdir(parents=True, exist_ok=True)
     backup = None
     if PLIST.exists() or PLIST.is_symlink():
         backup = PLIST.with_name(f"{PLIST.name}.bak-{stamp}")
@@ -81,7 +120,7 @@ def install_timer(dry_run: bool, stamp: str) -> int:
         return 0
     PLIST.write_text(TEMPLATE.read_text().replace("__HOME__", str(HOME)))
     os.chmod(PLIST, 0o644)
-    if not run(["plutil", "-lint", str(PLIST)]):
+    if run(["plutil", "-lint", str(PLIST)]).returncode != 0:
         print("warning: invalid plist", file=sys.stderr)
         PLIST.unlink(missing_ok=True)
         if backup:
@@ -119,16 +158,19 @@ def main() -> int:
         print("this installer is for macOS; use install.py on Linux", file=sys.stderr)
         return 2
     stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-    BIN.mkdir(parents=True, exist_ok=True)
-    STATE.mkdir(parents=True, exist_ok=True)
-    for name, source in LINKS.items():
+    if not args.dry_run:
+        BIN.mkdir(parents=True, exist_ok=True)
+        STATE.mkdir(parents=True, exist_ok=True)
+    for name, source in deploy_runtime(args.dry_run).items():
         link(source, BIN / name, args.dry_run, stamp)
     print(f"state   {STATE}")
     if args.no_timer:
         print("timer skipped")
         return 0
-    remove_duplicate_proxy_timer(args.dry_run, stamp)
-    return install_timer(args.dry_run, stamp)
+    result = install_timer(args.dry_run, stamp)
+    if result == 0:
+        remove_duplicate_proxy_timer(args.dry_run, stamp)
+    return result
 
 
 if __name__ == "__main__":

@@ -115,7 +115,34 @@ def list_skill_folders(mirror: str, commit: str) -> dict[str, str]:
 
 
 def materialize(mirror: str, commit: str, folder: str) -> str:
-    """把仓库中某目录的文件内容取到工作区，返回该目录绝对路径。"""
+    """批量预取目录中的缺失 blob，再将文件内容取到工作区。"""
+    listing = run(["git", "-C", mirror, "ls-tree", "-r", commit, "--", folder])
+    if listing.returncode != 0:
+        raise RuntimeError(_err("ls-tree", listing))
+    objects = sorted({
+        line.split(None, 3)[2] for line in listing.stdout.splitlines()
+        if len(line.split(None, 3)) >= 3 and line.split(None, 3)[1] == "blob"
+    })
+    if objects:
+        # Path-limited checkout may lazily fetch each blob separately. Probe without
+        # network access, then fetch all missing objects in one promisor request.
+        probe = run(
+            ["git", "-C", mirror, "cat-file", "--batch-check=%(objectname) %(objecttype)"],
+            input="\n".join(objects) + "\n",
+            env=dict(os.environ, GIT_NO_LAZY_FETCH="1"),
+        )
+        if probe.returncode != 0:
+            raise RuntimeError(_err("cat-file", probe))
+        missing = [line.split()[0] for line in probe.stdout.splitlines() if line.endswith(" missing")]
+        if missing:
+            fetched = run(
+                ["git", "-C", mirror, "-c", "fetch.negotiationAlgorithm=noop", "fetch",
+                 "--no-tags", "--no-write-fetch-head", "--recurse-submodules=no",
+                 "--filter=blob:none", "origin", "--stdin"],
+                input="\n".join(missing) + "\n",
+            )
+            if fetched.returncode != 0:
+                raise RuntimeError(_err("prefetch", fetched))
     target = os.path.join(mirror, folder)
     shutil.rmtree(target, ignore_errors=True)
     r = run(["git", "-C", mirror, "checkout", commit, "--", folder])

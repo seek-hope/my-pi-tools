@@ -6,7 +6,7 @@
 
 ## macOS 定时器
 
-macOS 使用 launchd，不使用 systemd。链接脚本并安装每日任务：
+macOS 使用 launchd，不使用 systemd。安装器将定时任务所需脚本和 CLI 清单部署到 `~/.local/share/my-pi-tools/`，再建立命令入口并安装每日任务：
 
 ```bash
 python3 skills-updater/install_macos.py --dry-run
@@ -28,7 +28,9 @@ launchctl kickstart -k gui/$(id -u)/com.my-pi-tools.update-pi-toolchain
 tail -f ~/Library/Logs/pi-toolchain-update.log
 ```
 
-只需链接、不安装定时器时加 `--no-timer`。全工具链定时器已包含 `cliproxyapi`，安装时会移除重复的单独代理定时器。技能目录和 `registry.json` 属于用户数据，不在仓库中；从已有机器迁移时需单独复制 `~/.agents/` 与 `~/.local/state/scientific-skills-check/registry.json`。
+只需部署命令、不安装定时器时加 `--no-timer`。运行副本仅包含技能/CLI 更新脚本、`tools.json`、定时入口及 `gemini-proxy/update.py`，不包含配置、凭据、技能、日志或整个仓库。`update-cliproxyapi` 也指向运行副本，使整个后台更新链不依赖 Desktop、Documents、Downloads 等受 macOS 隐私权限保护的目录；不需要为此给后台程序开放完全磁盘访问权限。
+
+更新仓库脚本或清单后，重新运行 `install_macos.py` 刷新运行副本；如果代理安装器重新链接了 `update-cliproxyapi`，也应重新运行此安装器。全工具链定时器已包含 `cliproxyapi`，安装时会移除重复的单独代理定时器。技能目录和 `registry.json` 属于用户数据，不在仓库中；从已有机器迁移时需单独复制 `~/.agents/` 与 `~/.local/state/scientific-skills-check/registry.json`。
 
 ## 安装与迁移
 
@@ -58,7 +60,7 @@ python3 skills-updater/install.py
 
 `--no-systemd` 只安装链接，不操作定时器，适合离线部署和测试；不要在旧更新任务运行时使用。安装不会主动运行更新服务，但启用 `Persistent=true` 的定时器时，systemd 可能补执行错过的计划。
 
-仓库路径必须长期可访问。迁移仓库位置前先停用定时器，在新位置重新运行安装器；之后查看链接与定时器状态，避免旧的绝对路径失效。脚本变更直接从仓库生效；修改 unit 文件后重新运行安装器，或执行 `systemctl --user daemon-reload` 并重启定时器。
+仓库路径必须长期可访问。迁移仓库位置前先停用定时器，在新位置重新运行安装器；之后查看链接与定时器状态，避免旧的绝对路径失效。Linux 的脚本变更直接从仓库生效；修改 unit 文件后重新运行安装器，或执行 `systemctl --user daemon-reload` 并重启定时器。macOS 使用运行副本，仓库变更后需重新运行 `install_macos.py`。
 
 ## 调度与手动操作
 
@@ -95,7 +97,7 @@ systemctl --user disable --now check-agent-skills.timer
 更新器按以下规则处理来源：
 
 - Git 来源从 `~/.agents/.skill-lock.json` 的 `skills` 条目读取；兼容其中的 `sourceUrl`、`skillPath`、`skillFolderHash`，保留其他字段。按来源默认分支的远端 `HEAD` 检查，不固定到安装时的 commit。
-- Git 缓存使用浅克隆和部分克隆，比对技能目录的 Git tree 哈希，有变化时才按需取回文件。部分克隆是否节省流量取决于上游服务器支持。
+- Git 缓存使用浅克隆和部分克隆，比对技能目录的 Git tree 哈希，有变化时才取回文件。检出前先探测本地缺失的 blob，通过一次 Git fetch 批量下载，避免大型技能目录逐文件触发网络请求；预取失败时保留原缓存目录。部分克隆是否节省流量取决于上游服务器支持。
 - `registry.json` 补充包来源和未进入安装器锁文件的 Git 技能。首次缺少登记文件时，使用脚本内的 `DEFAULT_REGISTRY`；已有登记文件不会被默认值重置。
 - 已安装但未登记的目录，如果名称匹配已知 Git 上游的技能，会自动登记到 `extraGitSkills`。不会把上游新增但本机未安装的技能全部装入。
 - `uv-tool` 来源先运行 `uv tool upgrade <package>`，再同步包内技能目录；升级失败则不继续复制该包。默认 `browser-use` 路径为 `~/.local/share/uv/tools/browser-use/lib/python*/site-packages/browser_use/skills/browser-use`。
@@ -168,4 +170,4 @@ python3 -B -m unittest discover -s skills-updater/test -v
 npm run test:skills
 ```
 
-测试使用临时 HOME、本地 Git 上游和模拟 npm/uv/codegraph/cliproxyapi 命令，不访问网络、不升级真实工具、不修改本机技能。覆盖目录哈希、更新与还原、备份、dry-run、上游移除、自动登记、失败退出、并发锁、非法状态、分阶段替换、安装幂等及回滚；CLI 测试还覆盖版本变化、缺失工具、失败隔离、超时、链接安全和统一入口。真实 systemd 调度和本机来源检查另行验证，离线测试不代替它们。
+测试使用临时 HOME、本地 Git 上游和模拟 npm/uv/codegraph/cliproxyapi 命令，不访问网络、不升级真实工具、不修改本机技能。覆盖目录哈希、缺失对象批量预取及失败保留缓存、更新与还原、备份、dry-run、上游移除、自动登记、失败退出、并发锁、非法状态、分阶段替换、安装幂等及回滚；CLI 测试还覆盖版本变化、缺失工具、失败隔离、超时、链接安全和统一入口。macOS 部署测试覆盖 dry-run、固定文件清单、运行副本刷新、源仓库不可访问、符号链接拒绝和复制失败时保留原文件。真实 systemd/launchd 调度和本机来源检查另行验证，离线测试不代替它们。
