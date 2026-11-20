@@ -629,14 +629,14 @@ export function registerWebTools(pi: ExtensionAPI, deps: WebToolDeps): void {
 		label: "Web fetch",
 		description: `Fetch one http(s) page through Exa or DeepSeek and return its title and Markdown content. provider="auto" (default) prefers Exa and silently falls back to DeepSeek when Exa is unavailable or fails; "exa"/"deepseek" restrict to one. Output is truncated to ${formatBytes(
 			config.maxResultBytes,
-		)} / ${config.maxResultLines} lines; the full text is saved to a temp file for follow-up reads. Private and metadata hosts are blocked. Pages are cached for ${Math.round(
+		)} / ${config.maxResultLines} lines; a returned file path points to the full text. Private and metadata hosts are blocked. Pages are cached for ${Math.round(
 			config.fetchCacheTtlMs / 1000,
 		)}s.`,
 		promptSnippet: "Fetch a web page as Markdown via DeepSeek or Exa (SSRF-guarded, truncated, cached)",
 		promptGuidelines: [
 			"Use web_fetch when you already have a specific URL, especially one returned by web_search.",
 			"For web_fetch, provider=\"auto\" tries Exa first, then DeepSeek if Exa is unavailable or fails. Use an explicit provider only when the task or user requires it.",
-			"If web_fetch output is truncated, read the saved temp file with offset/limit instead of refetching.",
+			"If web_fetch output is truncated and a file path is returned, read it with offset/limit instead of refetching.",
 		],
 		parameters: FETCH_PARAMS,
 		outputSchema: FETCH_OUTPUT_SCHEMA,

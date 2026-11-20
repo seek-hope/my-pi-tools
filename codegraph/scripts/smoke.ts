@@ -125,6 +125,7 @@ try {
   const discovered = await codemode.execute("smoke-codemode", {
     code: `
 const found = await searchTools("codegraph", { namespace: "mcp__codegraph" });
+if (!found.some(tool => tool.name === ${JSON.stringify(name)})) throw new Error("CodeGraph explore not discovered");
 const result = await tools.${name}({ query: "greet", projectPath: ${JSON.stringify(cwd)} });
 if (!result || !Array.isArray(result.content)) throw new Error("MCP result is not a CallToolResult");
 if (result.isError) throw new Error(result.content.filter((block) => block.type === "text").map((block) => block.text).join("\\n"));

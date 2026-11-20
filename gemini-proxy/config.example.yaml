@@ -23,11 +23,3 @@ requests:
 oauth:
   # OAuth credential storage; keep this directory private.
   auth-dir: "~/.cli-proxy-api"
-  providers:
-    antigravity:
-      # Pi 1.5.2: these two fixed system-prompt phrases can trigger upstream
-      # 429 RESOURCE_EXHAUSTED despite available quota. Reword only these
-      # exact phrases; keep user messages, tools, and permission rules intact.
-      sensitive-words-replace:
-        "You are a coding assistant running inside pi, a coding agent harness.": "Assist with software development using the tools provided by Pi."
-        "codemode scripts and non-LLM models such as classifiers and image models (docs/codemode.md)": "codemode usage, classification, and image generation (docs/codemode.md)"

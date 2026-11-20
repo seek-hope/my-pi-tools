@@ -30,8 +30,6 @@ LAUNCHD_UPDATE_PLIST = LAUNCHD_DIR / f"{LAUNCHD_UPDATE_LABEL}.plist"
 LAUNCHD_UPDATE_TEMPLATE = ROOT / "launchd/com.my-pi-tools.cliproxyapi-update.plist"
 
 LINKS = {
-    "cliproxy-pi-sync": ROOT / "bin/cliproxy-pi-sync",
-    "cliproxy-antigravity-login": ROOT / "bin/cliproxy-antigravity-login",
     "update-cliproxyapi": ROOT / "update.py",
     "update-cliproxyapi-scheduled": ROOT / "bin/update-cliproxyapi-scheduled",
 }
@@ -67,7 +65,8 @@ def install_launchd(dry_run: bool, stamp: str, no_timer: bool) -> int:
     if not shutil.which("launchctl"):
         print("warning: launchctl is unavailable; launchd agents were not installed", file=sys.stderr)
         return 1
-    LAUNCHD_DIR.mkdir(parents=True, exist_ok=True)
+    if not dry_run:
+        LAUNCHD_DIR.mkdir(parents=True, exist_ok=True)
     agents = [(LAUNCHD_PLIST, LAUNCHD_TEMPLATE)]
     if not no_timer:
         agents.append((LAUNCHD_UPDATE_PLIST, LAUNCHD_UPDATE_TEMPLATE))
@@ -138,11 +137,12 @@ def main() -> int:
         print("full toolchain timer present; skipping the separate proxy timer")
         args.no_timer = True
 
-    BIN.mkdir(parents=True, exist_ok=True)
-    CONFIG.mkdir(parents=True, exist_ok=True)
-    if sys.platform != "darwin":
-        UNIT_DIR.mkdir(parents=True, exist_ok=True)
-    os.chmod(CONFIG, 0o700)
+    if not args.dry_run:
+        BIN.mkdir(parents=True, exist_ok=True)
+        CONFIG.mkdir(parents=True, exist_ok=True)
+        if sys.platform != "darwin":
+            UNIT_DIR.mkdir(parents=True, exist_ok=True)
+        os.chmod(CONFIG, 0o700)
 
     config = CONFIG / "config.yaml"
     example = ROOT / "config.example.yaml"

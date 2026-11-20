@@ -58,13 +58,13 @@ python3 skills-updater/install.py
 
 安装器支持 `XDG_CONFIG_HOME` 和 `XDG_STATE_HOME`，不会覆盖技能、`.skill-lock.json` 或已有 `registry.json`。原脚本和 unit 文件备份到 `~/.local/state/scientific-skills-check/install-backups/<时间戳>/`。重复安装不会重复备份已正确指向仓库的链接；更新正在运行时拒绝切换。文件替换或 systemd 激活失败时，安装器尝试恢复原入口和定时器状态。
 
-`--no-systemd` 只安装链接，不操作定时器，适合离线部署和测试；不要在旧更新任务运行时使用。安装不会主动运行更新服务，但启用 `Persistent=true` 的定时器时，systemd 可能补执行错过的计划。
+`--no-systemd` 只安装链接，不操作定时器，适合离线部署和测试；不要在旧更新任务运行时使用。安装不会主动运行更新服务；Linux 定时器不补执行错过的计划。
 
 仓库路径必须长期可访问。迁移仓库位置前先停用定时器，在新位置重新运行安装器；之后查看链接与定时器状态，避免旧的绝对路径失效。Linux 的脚本变更直接从仓库生效；修改 unit 文件后重新运行安装器，或执行 `systemctl --user daemon-reload` 并重启定时器。macOS 使用运行副本，仓库变更后需重新运行 `install_macos.py`。
 
 ## 调度与手动操作
 
-默认按本机时区，每天 **09:00 后随机延迟 0–10 分钟**运行技能和 CLI 更新。错过执行时间会在用户级 systemd 恢复后补执行。不设置系统级任务、不修改 linger，也不调整其他定时器。service 的 `TimeoutStartSec=1800`，为较大的技能和官方 CLI 下载留出时间；服务用 `/usr/bin/python3` 启动包装器，避免继承项目的虚拟环境，PATH 中保留 npm 的 pi-node bin。
+Linux 按本机时区，每天 **20:00 后随机延迟 0–2 小时**启动技能和 CLI 更新；`Persistent=false`，不补执行错过的计划。service 的执行条件还会跳过休眠恢复等原因导致的时间窗外启动，避免次日早上补跑。已开始的更新可运行到 22:00 以后。macOS 仍为每天 09:00 后随机延迟 0–10 分钟。不设置系统级任务、不修改 linger，也不调整其他定时器。service 的 `TimeoutStartSec=1800`，为较大的技能和官方 CLI 下载留出时间；服务用 `/usr/bin/python3` 启动包装器，避免继承项目的虚拟环境，PATH 中保留 npm 的 pi-node bin。
 
 ```bash
 # 查看下次执行时间和最近结果
@@ -83,7 +83,8 @@ journalctl --user -u check-agent-skills.service -n 50 --no-pager
 ~/.local/bin/update-pi-toolchain --tools-only
 ~/.local/bin/update-clis --only codegraph
 
-# 立即运行 systemd 服务；暂停自动更新
+# 运行 systemd 服务（仅 20:00–22:00 内启动）；暂停自动更新
+# 白天手动更新请直接运行上面的 update-pi-toolchain
 systemctl --user start check-agent-skills.service
 systemctl --user disable --now check-agent-skills.timer
 ```

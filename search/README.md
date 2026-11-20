@@ -136,7 +136,7 @@ curl -s https://api.exa.ai/search \
 | 单飞 | 相同 key 的并发 miss 合并为一个请求，失败不缓存 |
 | 缓存 | search / fetch 独立的 TTL + LRU，命中路径刷新 LRU 顺序 |
 | 结果体积 | 字节 + 行双预算；按 UTF-8 安全截断，不产生半个字符 |
-| 溢出 | 全文写私有临时文件（0600），结果里给出路径；定期清理旧文件 |
+| 溢出 | 启用 `DEEPSEEK_WEB_SPILL` 且写入成功时，截断结果附上全文临时文件路径（0600）；定期清理旧文件 |
 | 响应体 | 流式读取并限制总字节，避免恶意大响应占满内存 |
 | 重定向 | `redirect: "manual"`，3xx 视为错误，防止借重定向绕过 URL 守卫 |
 
@@ -187,5 +187,5 @@ npm --prefix search run smoke
 | `[timeout]` | 增大 `DEEPSEEK_SEARCH_TIMEOUT_MS`，或检查到 `api.deepseek.com` / `api.exa.ai` 的网络 |
 | `[config] Exa is not configured` | 设置 `EXA_API_KEY`，或显式使用 `provider="deepseek"` |
 | `[blocked_url]` / `Fake-IP` | Fake-IP 会经 DoH 复核；若 DoH 不可达或仍返回私网，检查到 `cloudflare-dns.com` / `dns.google` 的 HTTPS 网络；只有确属内网测试环境才可设 `DEEPSEEK_WEB_ALLOW_PRIVATE_HOSTS=1` |
-| 结果被截断 | 用返回的临时文件路径 + `read` 的 offset/limit 继续读，或调大预算 |
+| 结果被截断 | 有 `fullPath` 时用 `read` 的 offset/limit 分段读取；codemode 可直接筛选结构化结果的 `content` |
 | 想看请求细节 | `DEEPSEEK_WEB_DEBUG=1 pi ...`，日志写到 stderr |

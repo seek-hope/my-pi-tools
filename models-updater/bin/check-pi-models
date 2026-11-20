@@ -1,0 +1,9 @@
+#!/bin/bash
+# One kernel lock for both manual runs and the user-level systemd timer.
+set -eu
+umask 077
+state="${XDG_STATE_HOME:-$HOME/.local/state}/pi-model-updates"
+mkdir -p "$state"
+chmod 700 "$state"
+script="$(dirname "$(readlink -f "$0")")/../check-models.mjs"
+exec flock -n "$state/update.lock" node "$script" "$@"

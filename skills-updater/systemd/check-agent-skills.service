@@ -8,4 +8,5 @@ Type=oneshot
 TimeoutStartSec=1800
 Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=%t/bus
 Environment=PATH=%h/.local/bin:%h/.local/share/pi-node/current/bin:/usr/local/bin:/usr/bin:/bin
+ExecCondition=/usr/bin/python3 -c "import datetime,sys; sys.exit(0 if 20 <= datetime.datetime.now().hour < 22 else 1)"
 ExecStart=/usr/bin/python3 %h/.local/bin/update-pi-toolchain

@@ -450,7 +450,10 @@ class InstallTests(Workspace):
         self.assertIn(("daemon-reload",), calls)
         self.assertIn(("enable", "--now", "check-agent-skills.timer"), calls)
         self.assertNotIn(("start", "check-agent-skills.service"), calls)
-        self.assertIn("OnCalendar=*-*-* 09:00:00", (ROOT / "systemd/check-agent-skills.timer").read_text())
+        timer = (ROOT / "systemd/check-agent-skills.timer").read_text()
+        self.assertIn("OnCalendar=*-*-* 20:00:00", timer)
+        self.assertIn("RandomizedDelaySec=2h", timer)
+        self.assertIn("Persistent=false", timer)
 
 
 if __name__ == "__main__":

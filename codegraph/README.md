@@ -4,7 +4,7 @@
 
 扩展通过 Pi **原生 MCP** 注册 `codegraph serve --mcp`，由 Pi 管理连接、工具发现、调用、取消、结果截断和重连。无需额外 MCP 适配器，CodeGraph CLI 需单独安装。
 
-要求 Node.js **≥ 22.19**、Pi **≥ 1.3.0**。开发依赖为 Pi **1.5.0**，CI 使用 CodeGraph **1.6.2**，覆盖 Linux 上的 Node 22/24 与 Pi 1.5.0 基线及最新稳定版；其他平台暂无测试覆盖。缺少 `registerMcpServer` 的 Pi 版本会在加载时提示升级。
+要求 Node.js **≥ 22.19**、Pi **≥ 1.3.0**。开发依赖为 Pi **1.5.0**，CI 在 Linux 的 Node 22/24 上检查 Pi 1.5.0 基线及最新稳定版；真实 MCP 集成测试使用 Node 22 和 CodeGraph **1.6.3**。缺少 `registerMcpServer` 的 Pi 版本会在加载时提示升级。
 
 ## 快速开始
 
@@ -17,7 +17,7 @@ codegraph --version
 如果尚未安装，按 [上游说明](https://github.com/colbymchenry/codegraph#get-started) 安装，或使用：
 
 ```bash
-npm install -g @colbymchenry/codegraph@1.6.2
+npm install -g @colbymchenry/codegraph@1.6.3
 ```
 
 **不需要执行 `codegraph install`**：它用于配置其他客户端，本扩展直接在 pi 会话里注册 MCP 服务。扩展不会自动下载或升级 CodeGraph。
@@ -63,7 +63,7 @@ pi -e /绝对路径/my-pi-tools/codegraph/src/index.ts
 
 默认使用 `direct` exposure：连接成功后，工具直接出现在模型工具列表中，同时可由 codemode 脚本调用。使用脚本调用时需启用 Pi 的 codemode。
 
-CodeGraph 1.6.2 **默认只公开 `codegraph_explore`**。工具名为：
+CodeGraph 1.6.3 **默认只公开 `codegraph_explore`**。工具名为：
 
 ```text
 mcp__codegraph__codegraph_explore

@@ -191,7 +191,7 @@ test("web_search executes and returns text plus structured details", async () =>
 	assert.equal(details.results[0]?.title, "Pi documentation");
 });
 
-test("codemode receives structured search results, full fetch content and typed errors", async () => {
+test("tool output schemas cover structured search results, full fetch content and typed errors", async () => {
 	const { byName } = captureTools(fakeClient());
 	const search = byName("web_search");
 	const fetch = byName("web_fetch");

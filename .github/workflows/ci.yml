@@ -99,7 +99,7 @@ jobs:
           cache: npm
           cache-dependency-path: codegraph/package-lock.json
       - name: Install CodeGraph CLI
-        run: npm install -g @colbymchenry/codegraph@1.6.2
+        run: npm install -g @colbymchenry/codegraph@1.6.3
       - name: Install extension dependencies
         working-directory: codegraph
         run: npm ci --ignore-scripts --no-audit --no-fund

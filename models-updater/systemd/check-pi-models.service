@@ -1,0 +1,14 @@
+[Unit]
+Description=同步 Pi 原生与自定义网关模型目录
+Documentation=file:%h/.local/state/pi-model-updates/last-report.txt
+After=network-online.target cliproxyapi.service check-agent-skills.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h
+UMask=0077
+TimeoutStartSec=180
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=%t/bus
+Environment=PATH=%h/.local/bin:%h/.local/share/pi-node/current/bin:/usr/local/bin:/usr/bin:/bin
+ExecCondition=/usr/bin/python3 -c "import datetime,sys; sys.exit(0 if 20 <= datetime.datetime.now().hour < 22 else 1)"
+ExecStart=%h/.local/bin/check-pi-models --sync --notify

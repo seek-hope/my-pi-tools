@@ -4,14 +4,15 @@
   "private": true,
   "license": "MIT",
   "type": "module",
-  "description": "Pi extensions: CodeGraph MCP, web search/fetch, and read-only Helper, plus a host toolchain updater",
+  "description": "Pi extensions for code navigation, web search, read-only help and prompt profiles; host tools for skills, CLIs, model catalogs and CLIProxyAPI",
   "engines": {
     "node": ">=22.19.0"
   },
   "scripts": {
     "check": "npm --prefix codegraph run typecheck && npm --prefix search run typecheck && npm --prefix helper run check && npm --prefix prompt-profile run typecheck",
-    "test": "npm --prefix codegraph test && npm --prefix search test && npm --prefix helper test && npm --prefix prompt-profile test && npm run test:skills",
+    "test": "npm --prefix codegraph test && npm --prefix search test && npm --prefix helper test && npm --prefix prompt-profile test && npm run test:skills && npm run test:models",
     "test:skills": "python3 -B -m unittest discover -s skills-updater/test -v",
+    "test:models": "node --test models-updater/test/*.test.mjs && python3 -B -m unittest discover -s models-updater/test -p 'test_*.py' -v",
     "smoke": "npm --prefix codegraph run smoke"
   }
 }

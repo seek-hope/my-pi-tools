@@ -1,5 +1,5 @@
 [Unit]
-Description=CLIProxyAPI - local Gemini/Claude subscription gateway
+Description=CLIProxyAPI - local API gateway
 Documentation=https://github.com/router-for-me/CLIProxyAPI
 After=network-online.target
 

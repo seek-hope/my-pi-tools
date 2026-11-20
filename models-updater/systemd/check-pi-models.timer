@@ -1,0 +1,12 @@
+[Unit]
+Description=每天同步 Pi 模型目录
+
+[Timer]
+OnCalendar=*-*-* 20:00:00
+RandomizedDelaySec=2h
+AccuracySec=1s
+Persistent=false
+Unit=check-pi-models.service
+
+[Install]
+WantedBy=timers.target

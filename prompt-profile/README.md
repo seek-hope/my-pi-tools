@@ -46,7 +46,7 @@ pi install ./prompt-profile
 
 | 工具 | 使用策略 |
 | --- | --- |
-| [Search](../search/README.md) | 搜索优先同时使用 Exa 和 DeepSeek（`provider="auto"`）；需要单源时优先 Exa，其次 DeepSeek。页面抓取默认先 Exa，不可用或失败时回退 DeepSeek。显式指定来源时按指定执行 |
+| [Search](../search/README.md) | 搜索优先同时使用 Exa 和 DeepSeek（`provider="auto"`）；需要单源时优先 Exa，其次 DeepSeek。页面抓取默认先 Exa，在来源不可用或可回退的错误时再用 DeepSeek；安全拒绝、参数错误和取消不换源。显式指定来源时按指定执行 |
 | [CodeGraph](../codegraph/README.md) | 优先用于已索引代码的架构、符号关系、故障与影响调查；已知文件、概念问题和文献研究使用相应工具 |
 | [Helper](../helper/README.zh-CN.md) | 委派有明确路径、上下文和预期输出的独立只读调查；使用结果前检查状态与证据 |
 | Pi codemode | 并行独立操作并逐项检查结果；依赖步骤和冲突写入按顺序执行 |

@@ -1,10 +1,11 @@
 [Unit]
-Description=每日检查 agent 技能上游更新
+Description=晚间检查 agent 技能与 CLI 上游更新
 
 [Timer]
-OnCalendar=*-*-* 09:00:00
-RandomizedDelaySec=10m
-Persistent=true
+OnCalendar=*-*-* 20:00:00
+RandomizedDelaySec=2h
+AccuracySec=1s
+Persistent=false
 Unit=check-agent-skills.service
 
 [Install]
